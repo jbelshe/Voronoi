@@ -9,7 +9,7 @@ matplotlib.use('Agg')  # Set matplotlib to non-interactive mode
 import matplotlib.pyplot as plt
 from io import BytesIO
 import base64
-from voronoi_functions import generate_voronoi_data, generate_voronoi_plot, generate_voronoi_diagram
+from voronoi_functions import generate_voronoi_data, generate_voronoi_plot
 
 # Set matplotlib backend explicitly
 os.environ['MPLBACKEND'] = 'Agg'
@@ -64,7 +64,7 @@ HTML_TEMPLATE = '''
 @app.route('/')
 def index():
     # Generate initial diagram with 10 points
-    diagram_data = generate_voronoi_diagram(10)
+    #diagram_data = generate_voronoi_diagram(10)
     (points, vertices, ridges) = generate_voronoi_data(10)
     diagram_data = generate_voronoi_plot(points, vertices, ridges, 1000, 1000)
     return render_template_string(HTML_TEMPLATE, diagram_data=diagram_data)
@@ -72,8 +72,8 @@ def index():
 @app.route('/generate')
 def generate():
     points = int(request.args.get('points', 10))
-    diagram_data = generate_voronoi_diagram(points)
-    (points, vertices, ridges) = generate_voronoi_data(10)
+    #diagram_data = generate_voronoi_diagram(points)
+    (points, vertices, ridges) = generate_voronoi_data(points)
     diagram_data = generate_voronoi_plot(points, vertices, ridges, 1000, 1000)
     return jsonify({'diagram': diagram_data})
 

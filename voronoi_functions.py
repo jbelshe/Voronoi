@@ -63,229 +63,13 @@ def find_border_intersections(x1, y1, x2, y2, width, height):
             #print("\tTOP SIDE INTERSECTION")
     return intersections
 
-def generate_voronoi_diagram(points, width=1000, height=1000):
-    """Generate Voronoi diagram and return it as a base64 encoded image."""
-    # Create random points
-    points_data = np.random.uniform(0+10, [width-10, height-10], (points, 2))
-    
-    # Create Voronoi diagram
-    vor = Voronoi(points_data)
-    
-    # Create figure and axis
-    fig, ax = plt.subplots(figsize=(8, 8))
-    
-    # Plot points
-    ax.plot(points_data[:,0], points_data[:,1], 'bo')
-    
-    # Number the points_data
-    print("DATA POITNS:")
-    for i, (x, y) in enumerate(points_data):
-        print("\tPoint ", i, ": (", x, y, ")")
-        ax.text(x, y, str(i), color='blue', fontsize=12, fontweight='bold', ha='right', va='bottom')
-    
-    # Plot vertices with different colors
-    colors = ['r', 'g', 'c', 'm', 'y', 'k']
-    print("Vertices (color coding):")
-    for i, vert in enumerate(vor.vertices):
-        color = colors[i % len(colors)]
-        print(f"\t{i} : {vert} (color: {color})")
-        ax.plot(vert[0], vert[1], color + 'o')
-        ax.text(vert[0], vert[1], str(i), color=color, fontsize=10, fontweight='bold', ha='right', va='bottom')
-    
-    
-    ridge_dict = defaultdict(list)
-    print("RIDGES:")
-    # Plot ridges
-    for i, simplex in enumerate(vor.ridge_vertices):
-        ridge_pts = vor.ridge_points[i]
-        simplex = np.asarray(simplex)
-        if np.all(simplex >= 0):
-            print("\t", simplex, '-', vor.vertices[simplex[0]], ", ", vor.vertices[simplex[1]])
-            ridge_dict[simplex[0]].append(simplex[1])
-            ridge_dict[simplex[1]].append(simplex[0])
-            ax.plot(vor.vertices[simplex,0], vor.vertices[simplex,1], 'k-')
-        else:
-            print("\t", simplex)
-            if ridge_pts[1] < 0:
-                ridge_dict[simplex[0]].append(simplex[1])
-            else:
-                ridge_dict[simplex[1]].append(simplex[0])
-        print("\t\tRidge Points:", ridge_pts)
-    
-    print("RIDGE DICT:")
-    for ridge in ridge_dict:
-        print(ridge, np.asarray(ridge_dict[ridge]))
-    
-        
 
-    new_vertices = defaultdict(list)
-    new_vertices_index = -2
-    # -2 ->  edge point1, edge point2
-    # pointed to by X, Y, Z
-    # -3 ->  edge point1, edge point2
-    # pointed to by X, Y, Z
-
-    # Plot infinite ridges with clipping
-    center = points_data.mean(axis=0)
-    #if 0:
-    for pointidx, simplex in zip(vor.ridge_points, vor.ridge_vertices):
-        simplex = np.asarray(simplex)
-        print("\n\nVertex Points:", simplex, " for Points:", pointidx)
-        if np.any(simplex < 0):
-            i = simplex[simplex >= 0][0]
-            print("Point", i, "->", vor.vertices[i])
-            print("\tAdjacent Verts:", ridge_dict[i])
-            adjacent_verts = ridge_dict[i] 
-            t = points_data[pointidx[1]] - points_data[pointidx[0]]
-            t = t / np.linalg.norm(t)
-            n = np.array([-t[1], t[0]])
-            midpoint = points_data[pointidx].mean(axis=0)
-            far_point = vor.vertices[i] + np.sign(np.dot(midpoint - center, n)) * n * 1000
-            
-            x1, y1 = vor.vertices[i]
-            x2, y2 = far_point
-            
-            print("\tMidpoint:", midpoint)
-            print("\tFar Point:", far_point)
-            # Find intersection with boundaries
-            intersections = []
-            if x1 != x2:  # horizontal line check
-                y_left = y1 + (0 - x1) * (y2 - y1) / (x2 - x1)
-                if 0 <= y_left <= height:
-                    intersections.append((0, y_left))
-                    print("\tLEFT SIDE INTERSECTION")
-                y_right = y1 + (width - x1) * (y2 - y1) / (x2 - x1)
-                if 0 <= y_right <= height:
-                    intersections.append((width, y_right))
-                    print("\tRIGHT SIDE INTERSECTION")
-            if y1 != y2:  # vertical line check
-                x_bottom = x1 + (0 - y1) * (x2 - x1) / (y2 - y1)
-                if 0 <= x_bottom <= width:
-                    intersections.append((x_bottom, 0))
-                    print("\tBOTTOM SIDE INTERSECTION")
-                x_top = x1 + (height - y1) * (x2 - x1) / (y2 - y1)
-                if 0 <= x_top <= width:
-                    intersections.append((x_top, height))
-                    print("\tTOP SIDE INTERSECTION")
-
-            intersections.sort(key=lambda p: (p[0] - x1)**2 + (p[1] - y1)**2)
-            # Sort intersections based on distance to midpoint
-            print("\tIntersections:", np.asarray(intersections))
-            intersect_point = 0
-
-
-
-            # Find Angles
-            center_point = vor.vertices[i]
-            if 0 <= center_point[0] <= width and 0 <= center_point[1] <= height: 
-                vectors = list()
-                print("Point", i, ":", np.asarray(center_point))
-                infinite_count = 0
-                for vert in adjacent_verts:
-                    if vert == -1:
-                        infinite_count += 1
-                        other_point = intersections[0]
-                    elif vert < -1:
-                        print("\tVert:", vert, "->", np.asarray(new_vertices[vert]))
-                        other_point = new_vertices[vert][0]
-                    else:
-                        other_point = vor.vertices[vert]
-                    vectors.append(np.array([other_point[0] - center_point[0], other_point[1] - center_point[1]]))
-                    print("\tto point", vert, ":", np.asarray(other_point))
-
-                if infinite_count == 2:
-                    for inter in intersections:
-                        new_vertices[new_vertices_index].append(inter)
-                    print("Adding new vertex:", new_vertices_index, " to system")
-                    for i in range(len(adjacent_verts)):
-                        if adjacent_verts[i] == -1:
-                            adjacent_verts[i] = new_vertices_index
-                            break
-                    print("Updated adjacent vertices for vertex:", i, ":", adjacent_verts)
-                    new_vertices_index -= 1
-
-                if infinite_count <= 1:
-                    angles = calculate_angles(vectors[0], vectors[1], vectors[2])
-                    # angle1 = angle_between_vectors(vectors[0], vectors[1])
-                    # angle2 = angle_between_vectors(vectors[1], vectors[2])
-                    # angle3 = angle_between_vectors(vectors[2], vectors[0])
-                    # angles = [angle1, angle2, angle3]
-                    angles_deg = [np.degrees(a) for a in angles]
-                    anglesum = sum(angles)
-                    anglesum_deg = sum(angles_deg)
-
-                    # Print angles in radians and degrees, and denote which two vertex points they are between
-                    angle_pairs = [
-                        (adjacent_verts[0], adjacent_verts[1]),
-                        (adjacent_verts[1], adjacent_verts[2]),
-                        (adjacent_verts[2], adjacent_verts[0])
-                    ]
-                    for idx, ((v1, v2), a, ad) in enumerate(zip(angle_pairs, angles, angles_deg), 1):
-                        print(f"\tAngle {idx} (between vertices {v1} and {v2}): {a:.6f} rad, {ad:.2f} deg")
-                    print(f"\tAngle Sum: {anglesum:.6f} rad, {anglesum_deg:.2f} deg")
-
-                    # Check if sum is close to 360 deg (2*pi radians)
-                    if abs(anglesum - 2 * np.pi) > 1e-4:
-                        print("\t[WARNING] Angles do not sum to 360 degrees (2π radians)!")
-
-                    # If sum is less than 360 degrees, try switching the intersection point
-                    tolerance = 1e-4
-                    if anglesum < 2 * np.pi - tolerance: 
-                        print("\t[INFO] Angle sum is less than 360 degrees. Switching intersection point for infinite vertex.")
-                        # Rebuild vectors using intersections[1] for vert == -1
-                        new_vectors = []
-                        for vert in adjacent_verts:
-                            if vert == -1:
-                                other_point = intersections[1]
-                                intersect_point = 1
-                            else:
-                                other_point = vor.vertices[vert]
-                            new_vectors.append(np.array([other_point[0] - center_point[0], other_point[1] - center_point[1]]))
-                        # Recalculate angles
-                        
-                        angles = calculate_angles(vectors[0], vectors[1], vectors[2])
-                        # angle1 = angle_between_vectors(new_vectors[0], new_vectors[1])
-                        # angle2 = angle_between_vectors(new_vectors[1], new_vectors[2])
-                        # angle3 = angle_between_vectors(new_vectors[2], new_vectors[0])
-                        # angles = [angle1, angle2, angle3]
-                        angles_deg = [np.degrees(a) for a in angles]
-                        anglesum = sum(angles)
-                        anglesum_deg = sum(angles_deg)
-                        # Print recalculated angles
-                        for idx, ((v1, v2), a, ad) in enumerate(zip(angle_pairs, angles, angles_deg), 1):
-                            print(f"\t[RECALC] Angle {idx} (between vertices {v1} and {v2}): {a:.6f} rad, {ad:.2f} deg")
-                        print(f"\t[RECALC] Angle Sum: {anglesum:.6f} rad, {anglesum_deg:.2f} deg")
-                        if abs(anglesum - 2 * np.pi) > tolerance:
-                            print("\t[WARNING] Even after switching intersection, angles do not sum to 360 degrees!")
-                            return generate_voronoi_diagram(points, width, height)
-                            print("FUCK START OVER")
-
-
-            if intersections:
-                ax.plot([x1, intersections[intersect_point][0]], [y1, intersections[intersect_point][1]], 'k-')
-    
-    # Set plot limits and aspect
-    ax.set_xlim(0, width)
-    ax.set_ylim(0, height)
-    ax.set_aspect('equal')
-    plt.title('Voronoi Diagram')
-    
-    # Save figure to buffer
-    buf = BytesIO()
-    plt.savefig(buf, format='png')
-    plt.close(fig)
-    
-    # Encode image as base64
-    buf.seek(0)
-    img_str = base64.b64encode(buf.getvalue()).decode()
-    return f'data:image/png;base64,{img_str}'
-
-def generate_voronoi_data(points, width=1000, height=1000):
-    print("\n\n_"*50)
+def generate_voronoi_data(points, width=1, height=1):
+    print("\n\n", ("_"*50))
     print("generate_voronoi_data()")
     """Generate Voronoi diagram and return it as a base64 encoded image."""
     # Create random points
-    points_data = np.random.uniform(0+10, [width-10, height-10], (points, 2))
+    points_data = np.random.uniform(0.01, [width-(width*0.10), height-(height*0.10)], (points, 2))
     
     # Create Voronoi diagram
     vor = Voronoi(points_data)
@@ -326,11 +110,18 @@ def generate_voronoi_data(points, width=1000, height=1000):
             if ob_count == 2:
                 #continue # this is done out precaution.  It seems like this behavior can't be fixed
                 print("\t\tBoth vertices are outside frame boundaries")
-                if abs(intersections[0][0] - intersections[1][0]) == 1000 or abs(intersections[0][1] - intersections[1][1]) == 1000 or \
-                    (x1 >= 1000 and x2 >= 1000) or \
-                    (x1 >= 1000 and x2 >= 1000) or \
-                    (y1 < 0 and y2 < 0) or \
-                    (y1 > 0 and y2 > 0):
+                # if abs(intersections[0][0] - intersections[1][0]) == 1000 or abs(intersections[0][1] - intersections[1][1]) == 1000:
+                #     print("\t\tSKIPING REASON: Edge to edge")
+                #     print("\tSKIPPING THIS ONE")
+                #     continue
+                if (x1 >= width and x2 >= width) or \
+                    (y1 >= height and y2 >= height):
+                    print("\t\tSKIPING REASON: Both X or Y above max border")
+                    print("\tSKIPPING THIS ONE")
+                    continue
+                elif (x1 < 0 and x2 < 0) or \
+                    (y1 < 0 and y2 < 0):
+                    print("\t\tSKIPING REASON: Both X or Y below min border")
                     print("\tSKIPPING THIS ONE")
                     continue
                     
@@ -421,9 +212,24 @@ def generate_voronoi_data(points, width=1000, height=1000):
             x1, y1 = vor.vertices[index]
             x2, y2 = far_point
 
-            # if the valid vertex is off frame, skip
+            # TODO: Figure out how to determine when an offrame vertex can send a line all the way across
+                # I think you need to do interesection calculations with all other lines
+                # not worth the pain imo, I'm going to calculate # of polygons and redo if #'s don't match up
+            # # if the valid vertex is off frame, skip
             if not (0 < x1 < width and 0 < y1 < height):
+                print("\t\tValid Index is completely off frame -> SKIPPING", x1, width, y1, height)
                 continue 
+            # if (0 < x1 < width and 0 < y1 < height):
+            #     print("NEW RIDGE VERTEX #", len(ret_vertices)-1, ":", np.asarray(intersections[0]))  
+            #     ret_vertices.append(np.asarray(intersections[0]))
+            #     print("NEW RIDGE VERTEX #", len(ret_vertices)-1, ":", np.asarray(intersections[1])) 
+            #     ret_vertices.append(np.asarray(intersections[1]))
+            #     vor.vertices = np.append(vor.vertices, [intersections[0]], axis=0)
+            #     vor.vertices = np.append(vor.vertices, [intersections[1]], axis=0)
+            #     print("NEW RIDGE Between Ridge Vertices", len(ret_vertices)-2, "and",len(ret_vertices)-1)  
+            #     ret_ridges.append([len(ret_vertices)-2, len(ret_vertices)-1]) 
+
+
             
             print("\tMidpoint:", midpoint)
             print("\tFar Point:", far_point)
@@ -433,6 +239,8 @@ def generate_voronoi_data(points, width=1000, height=1000):
             intersections.sort(key=lambda p: (p[0] - x1)**2 + (p[1] - y1)**2)
             print("\tIntersections:", np.asarray(intersections))
             intersect_point = 0
+
+
 
 
 
@@ -512,7 +320,7 @@ def generate_voronoi_data(points, width=1000, height=1000):
                         print(f"\t[RECALC] Angle Sum: {anglesum:.6f} rad, {anglesum_deg:.2f} deg")
                         if abs(anglesum - 2 * np.pi) > tolerance:
                             print("\t[WARNING] Even after switching intersection, angles do not sum to 360 degrees!")
-                            return generate_voronoi_diagram(points, width, height)
+                            return generate_voronoi_data(points, width, height)
             
             print("NEW RIDGE VERTEX #", len(ret_vertices), ":", np.asarray(intersections[intersect_point]))  
             print("NEW RIDGE Between Ridge Vertices", index, "and",len(ret_vertices))  
@@ -532,11 +340,12 @@ def generate_voronoi_plot(points, vertices, ridges, width=1000, height=1000):
     fig, ax = plt.subplots(figsize=(8, 8))
     
     # Plot points
-    ax.plot(points[:,0], points[:,1], 'bo')
+    ax.plot(points[:,0]*width, points[:,1]*height, 'bo')
     
     # Number the points_data
     print("DATA POINTS:")
-    for i, (x, y) in enumerate(points):
+    for i, (x_raw, y_raw) in enumerate(points):
+        x, y = x_raw * width, y_raw * height
         print("\tPoint ", i, ": (", x, y, ")")
         ax.text(x, y, str(i), color='blue', fontsize=12, fontweight='bold', ha='right', va='bottom')
     
@@ -544,10 +353,11 @@ def generate_voronoi_plot(points, vertices, ridges, width=1000, height=1000):
     colors = ['r', 'g', 'c', 'm', 'y', 'k']
     print("Vertices (color coding):")
     for i, vert in enumerate(vertices):
+        x, y = vert[0] * width, vert[1] * height
         color = colors[i % len(colors)]
-        print(f"\t{i} : {vert} (color: {color})")
-        ax.plot(vert[0], vert[1], color + 'o')
-        ax.text(vert[0], vert[1], str(i), color=color, fontsize=10, fontweight='bold', ha='right', va='bottom')
+        print(f"\t{i} : {x, y} (color: {color})")
+        ax.plot(x, y, color + 'o')
+        ax.text(x, y, str(i), color=color, fontsize=10, fontweight='bold', ha='right', va='bottom')
     
     
     print("RIDGES:")
@@ -556,18 +366,17 @@ def generate_voronoi_plot(points, vertices, ridges, width=1000, height=1000):
         ridge_pts = ridges[i]
         simplex = np.asarray(simplex)
         if np.all(simplex >= 0):
-            print("\t", simplex, '-', vertices[simplex[0]], ", ", vertices[simplex[1]])
-            x1, y1 = vertices[simplex[0]]
-            x2, y2 = vertices[simplex[1]]
-            if abs(x1 - x2) == 1000 or abs(y1 - y2) == 1000 or \
-                x1 >= 1000 and x2 >= 1000 or \
-                y1 >= 1000 and y2 >= 1000 or \
-                x1 < 0 and x2 < 0 or \
-                y1 < 0 and y2 < 0:
+            x1, y1 = vertices[simplex[0]][0] * width, vertices[simplex[0]][1] * height
+            x2, y2 = vertices[simplex[1]][0] * width, vertices[simplex[1]][1] * height
+            print("\t", simplex, '-', (x1, y1), ", ", (x2, y2))
+            if    x1 >= width and x2 >= width or \
+                y1 >= height and y2 >= height or \
+                x1 <= 0 and x2 <= 0 or \
+                y1 <= 0 and y2 <= 0:
                 print("\tPSYCH! I AINT PLOTTING - ", simplex)
                 continue
             else:
-                ax.plot([vertices[simplex[0]][0], vertices[simplex[1]][0]], [vertices[simplex[0]][1], vertices[simplex[1]][1]], 'k-')
+                ax.plot([x1, x2], [y1, y2], 'k-')
 
 
 
