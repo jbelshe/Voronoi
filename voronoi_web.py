@@ -65,16 +65,16 @@ HTML_TEMPLATE = '''
 def index():
     # Generate initial diagram with 10 points
     #diagram_data = generate_voronoi_diagram(10)
-    (points, vertices, ridges) = generate_voronoi_data(10)
-    diagram_data = generate_voronoi_plot(points, vertices, ridges, 1000, 1000)
+    (points, vertices, ridges, regions) = generate_voronoi_data(10)
+    diagram_data = generate_voronoi_plot(points, vertices, ridges, regions, 1000, 1000)
     return render_template_string(HTML_TEMPLATE, diagram_data=diagram_data)
 
 @app.route('/generate')
 def generate():
     points = int(request.args.get('points', 10))
     #diagram_data = generate_voronoi_diagram(points)
-    (points, vertices, ridges) = generate_voronoi_data(points)
-    diagram_data = generate_voronoi_plot(points, vertices, ridges, 1000, 1000)
+    (points, vertices, ridges, regions) = generate_voronoi_data(points)
+    diagram_data = generate_voronoi_plot(points, vertices, ridges, regions, 1000, 1000)
     return jsonify({'diagram': diagram_data})
 
 if __name__ == '__main__':
