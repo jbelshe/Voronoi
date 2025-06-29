@@ -1,4 +1,5 @@
 from collections import defaultdict
+import enum
 from math import pi
 import numpy as np
 from scipy.spatial import Voronoi
@@ -58,7 +59,7 @@ def find_border_intersections(x1, y1, x2, y2, width, height):
             #print("\tTOP SIDE INTERSECTION")
     return intersections
 
-def add_frame_edges(vertices, ridges):
+def add_frame_edges(vertices):
     vertices.append([0, 0])
     vertices.append([1, 0])
     vertices.append([1, 1])
@@ -86,13 +87,14 @@ def add_frame_edges(vertices, ridges):
     edges[2] = sorted(edges[2], key=lambda x: vertices[x][0])
     edges[3] = sorted(edges[3], key=lambda x: vertices[x][0])
 
-
-
     for edge in edges:
         print("EDGE:", edge)
     return edges
 
-def add_edges_to_vertices(vertex_dict, edges):
+def add_edges_to_vertices(vertex_dict, edges, vertex_region_dict):
+    print("Vertex-to-region")
+    for vertex in vertex_region_dict:
+        print("\tVertex:", vertex, "region:", vertex_region_dict[vertex])
     for edge in edges:
         for i in range(len(edge)-1):
             vertex_dict[edge[i]].append(edge[i+1])
@@ -137,9 +139,78 @@ def assign_regions_to_vertices(vertex_region_dict, vertex_dict, regions, ridge_p
             print("REGION:", i, region)
     return ret_regions
 
+
+def sort_polygon_data(my_polygon_data, my_polygon_data_advanced):
+    sorted_polygons = list()
+    for i, data in enumerate(my_polygon_data):
+        polygon = []
+        visited = set()
+        # get a starting point and add it back to polygon
+        if len(data) == 0:
+            continue
+        point = data.pop()
+        my_polygon_data[i].add(point)
+        points_adjacency_matrix = my_polygon_data_advanced[i]
+        # TODO: Fix this formating issue
+        polygon_size = len(data)
+        print("Sorting polygon", i, ":", data)
+        print("Size:", polygon_size)
+        while len(polygon) < polygon_size:
+            print("\tPoint:", point, "Visited:", visited, "Curr_Size:", len(polygon))
+            polygon.append(point)
+            visited.add(point)
+            adjacents = points_adjacency_matrix[point]
+            print("\t", adjacents)
+            if len(adjacents) == 1:
+                print("ERROR: Point", point, "doesn't have all adjacent points")
+                break
+            elif adjacents[0][1] not in visited:  
+                point = adjacents[0][1]
+            else:
+                point = adjacents[1][1]
+        print("Post Sort:", polygon)
+        if len(polygon) == polygon_size:
+            sorted_polygons.append(polygon)
+        else:
+            sorted_polygons.append(list(data))
                 
+
+    for i, poly in enumerate(sorted_polygons):
+        print("Polygon", i, ":", poly)
+
+    return sorted_polygons
+
+
+
             
-            
+def add_ridges_to_point_regions(ridge_vertex1, ridge_vertex2, ridge_points, my_polygon_data, my_polygon_data_advanced, vertex_region_dict):
+    polygon_point1 = ridge_points[0]
+    polygon_point2 = ridge_points[1]
+    ridge_vertex1 = int(ridge_vertex1)
+    ridge_vertex2 = int(ridge_vertex2)
+    
+    
+    # Index = Voronoi Point, value = set of vertices belonging to point's polygon
+    my_polygon_data[polygon_point1].add(ridge_vertex1)
+    my_polygon_data[polygon_point1].add(ridge_vertex2)
+    my_polygon_data[polygon_point2].add(ridge_vertex1)
+    my_polygon_data[polygon_point2].add(ridge_vertex2)
+
+    # index = vertex, value = set of polygons point connects to
+    vertex_region_dict[int(ridge_vertex1)].add(int(polygon_point1))
+    vertex_region_dict[int(ridge_vertex2)].add(int(polygon_point1))
+    vertex_region_dict[int(ridge_vertex1)].add(int(polygon_point2))
+    vertex_region_dict[int(ridge_vertex2)].add(int(polygon_point2))
+
+    # my_polygon_data_advanced[polygon_point1] = defaultdict(list)
+    # my_polygon_data_advanced[polygon_point2] = defaultdict(list)
+    
+    my_polygon_data_advanced[polygon_point1][ridge_vertex1].append((ridge_vertex1, ridge_vertex2))
+    my_polygon_data_advanced[polygon_point1][ridge_vertex2].append((ridge_vertex2, ridge_vertex1))
+
+    my_polygon_data_advanced[polygon_point2][ridge_vertex1].append((ridge_vertex1, ridge_vertex2))
+    my_polygon_data_advanced[polygon_point2][ridge_vertex2].append((ridge_vertex2, ridge_vertex1))
+
 
 def generate_voronoi_data(points, width=1, height=1):
     print("\n\n", ("_"*50))
@@ -152,22 +223,26 @@ def generate_voronoi_data(points, width=1, height=1):
     vor = Voronoi(points_data)
     
 
-    vertex_region_dict = defaultdict(list)
+    vertex_region_dict = defaultdict(set)
     vertex_dict = defaultdict(list) 
     ridge_points_dict = defaultdict(set)
+    my_polygon_data = list()
+    my_polygon_data_advanced = defaultdict(dict)
 
     print("Regions:")
     for i, region in enumerate(vor.regions):
         print(i, " : ", region)
+        my_polygon_data.append(set())
+        my_polygon_data_advanced[i] = defaultdict(list)
 
-    print("Vertex REGIONS:")
-    for i, region in enumerate(vor.regions):
-        for p in region:
-            vertex_region_dict[p].append(i)
+    # print("Vertex REGIONS:")
+    # for i, region in enumerate(vor.regions):
+    #     for p in region:
+    #         vertex_region_dict[p].append(i)
 
 
-    for v in vertex_region_dict:
-        print("\t", v, " : ", vertex_region_dict[v])
+    # for v in vertex_region_dict:
+    #     print("\t", v, " : ", vertex_region_dict[v])
 
 
 
@@ -230,13 +305,17 @@ def generate_voronoi_data(points, width=1, height=1):
                     vor.vertices = np.append(vor.vertices, [intersection], axis=0)
                     vor.ridge_vertices[i] = [len(ret_vertices)-2, len(ret_vertices)-1]
                 print("\t1).  NEW RIDGE Between Ridge Vertices", len(ret_vertices)-1, "and", len(ret_vertices))  
-                ret_ridges.append([len(ret_vertices)-2, len(ret_vertices)-1])
-                ridge_dict[len(ret_vertices)-1].append(len(ret_vertices)-2)
-                ridge_dict[len(ret_vertices)-2].append(len(ret_vertices)-1)
-                vertex_dict[len(ret_vertices)-1].append(len(ret_vertices)-2)
-                vertex_dict[len(ret_vertices)-2].append(len(ret_vertices)-1)
+                new_vertex_index1 = len(ret_vertices) - 2
+                new_vertex_index2 = len(ret_vertices) - 1
+                ret_ridges.append([new_vertex_index1, new_vertex_index2])
+                ridge_dict[new_vertex_index2].append(new_vertex_index1)
+                ridge_dict[new_vertex_index1].append(new_vertex_index2)
+                vertex_dict[new_vertex_index2].append(new_vertex_index1)
+                vertex_dict[new_vertex_index1].append(new_vertex_index2)
                 point_x, point_y = tuple(sorted(vor.ridge_points[i]))
-                ridge_points_dict[len(ret_vertices)-2, len(ret_vertices)-1] = { int(point_x), int(point_y)}
+                ridge_points_dict[new_vertex_index1, new_vertex_index2] = { int(point_x), int(point_y)}
+                add_ridges_to_point_regions(new_vertex_index1, new_vertex_index2, vor.ridge_points[i], my_polygon_data, my_polygon_data_advanced, vertex_region_dict)
+                        
             elif ob_count == 1:
                 print(f"\t\tOne of Vertex {vertex} at ({x1:.2f}, {y1:.2f}) or ({x2:.2f}, {y2:.2f}) is outside frame boundaries")
                 for intersect in intersections:
@@ -249,31 +328,35 @@ def generate_voronoi_data(points, width=1, height=1):
                         vor.ridge_vertices[i] = [simplex[replace_simplex], len(ret_vertices)-1]
                         if replace_simplex == 0:  # if the OB vertex is the first one
                             print("\t2). NEW RIDGE Between Ridge Vertices: ", simplex[1], "to", len(ret_vertices)-1)
-                            vor.ridge_vertices[i] = [simplex[1], len(ret_vertices)-1]
-                            ret_ridges.append([simplex[1], len(ret_vertices)-1])
-                            ridge_dict[simplex[1]].append(len(ret_vertices)-1)
-                            ridge_dict[len(ret_vertices)-1].append(simplex[1])
-                            vertex_dict[simplex[1]].append(len(ret_vertices)-1)
-                            vertex_dict[len(ret_vertices)-1].append(int(simplex[1]))
+                            new_vertex_index = len(ret_vertices) - 1
+                            vor.ridge_vertices[i] = [simplex[1], new_vertex_index]
+                            ret_ridges.append([simplex[1], new_vertex_index])
+                            ridge_dict[simplex[1]].append(new_vertex_index)
+                            ridge_dict[new_vertex_index].append(simplex[1])
+                            vertex_dict[simplex[1]].append(new_vertex_index)
+                            vertex_dict[new_vertex_index].append(int(simplex[1]))
 
                             point_x, point_y = tuple(sorted(vor.ridge_points[i]))
-                            ridge_points_dict[tuple(sorted((simplex[1], len(ret_vertices)-1)))] = {int(point_x), int(point_y)}
+                            ridge_points_dict[tuple(sorted((simplex[1], new_vertex_index)))] = {int(point_x), int(point_y)}
+                            add_ridges_to_point_regions(simplex[1], new_vertex_index, vor.ridge_points[i], my_polygon_data, my_polygon_data_advanced, vertex_region_dict)
                         else:  # if the OB vertex is the second one
                             print("\t2). NEW RIDGE Between Ridge Vertices: ", simplex[0], "to", len(ret_vertices)-1)
-                            vor.ridge_vertices[i] = [simplex[0], len(ret_vertices)-1]
-                            ret_ridges.append([simplex[0], len(ret_vertices)-1])
-                            ridge_dict[simplex[0]].append(len(ret_vertices)-1)
-                            ridge_dict[len(ret_vertices)-1].append(simplex[0])
-                            vertex_dict[simplex[0]].append(len(ret_vertices)-1)
-                            vertex_dict[len(ret_vertices)-1].append(int(simplex[0]))
+                            new_vertex_index = len(ret_vertices)-1
+                            vor.ridge_vertices[i] = [simplex[0], new_vertex_index]
+                            ret_ridges.append([simplex[0], new_vertex_index])
+                            ridge_dict[simplex[0]].append(new_vertex_index)
+                            ridge_dict[new_vertex_index].append(simplex[0])
+                            vertex_dict[simplex[0]].append(new_vertex_index)
+                            vertex_dict[new_vertex_index].append(int(simplex[0]))
                             point_x, point_y = tuple(sorted(vor.ridge_points[i]))
-                            ridge_points_dict[tuple(sorted((simplex[0], len(ret_vertices)-1)))] = {int(point_x), int(point_y)}
+                            ridge_points_dict[tuple(sorted((simplex[0], new_vertex_index)))] = {int(point_x), int(point_y)}
+                            add_ridges_to_point_regions(simplex[0], new_vertex_index, vor.ridge_points[i], my_polygon_data, my_polygon_data_advanced, vertex_region_dict)
                     else:  # intersection is on the other side and not between desired points
                         print("\t\tOutside Range - Skipping ", intersect)
             else:    # if there both vertices are inside the frame    
                 ridge_dict[simplex[0]].append(simplex[1])
                 ridge_dict[simplex[1]].append(simplex[0])
-
+                add_ridges_to_point_regions(simplex[0], simplex[1], vor.ridge_points[i], my_polygon_data, my_polygon_data_advanced, vertex_region_dict)
                 point_x, point_y = tuple(sorted(vor.ridge_points[i]))
                 ridge_points_dict[tuple(sorted(simplex))] = {int(point_x), int(point_y)}
                 vertex_dict[simplex[0]].append(int(simplex[1]))
@@ -288,14 +371,17 @@ def generate_voronoi_data(points, width=1, height=1):
                 ridge_dict[simplex[1]].append(simplex[0])
         print("\t\tRidge Points:", ridge_pts)
 
+    for i, polygon in enumerate(my_polygon_data):
+        print("Polygon", i, ":", polygon)
 
 
     print("RIDGE Dictionary:")
     for ridge in ridge_points_dict:
         print("\tRidge", np.asarray(ridge), "connects points:", np.asarray(ridge_points_dict[ridge]))
 
-    ret_regions = assign_regions_to_vertices(vertex_region_dict, vertex_dict, vor.regions,ridge_points_dict)
-
+    #ret_regions = assign_regions_to_vertices(vertex_region_dict, vertex_dict, vor.regions,ridge_points_dict)
+    #for region in ret_regions:
+    #    print(region)
 
     print("Updated Vertices:")
     for i, vertex in enumerate(np.asarray(vor.vertices)):
@@ -346,16 +432,6 @@ def generate_voronoi_data(points, width=1, height=1):
             if not (0 < x1 < width and 0 < y1 < height):
                 print("\t\tValid Index is completely off frame -> SKIPPING", x1, width, y1, height)
                 continue 
-            # if (0 < x1 < width and 0 < y1 < height):
-            #     print("NEW RIDGE VERTEX #", len(ret_vertices)-1, ":", np.asarray(intersections[0]))  
-            #     ret_vertices.append(np.asarray(intersections[0]))
-            #     print("NEW RIDGE VERTEX #", len(ret_vertices)-1, ":", np.asarray(intersections[1])) 
-            #     ret_vertices.append(np.asarray(intersections[1]))
-            #     vor.vertices = np.append(vor.vertices, [intersections[0]], axis=0)
-            #     vor.vertices = np.append(vor.vertices, [intersections[1]], axis=0)
-            #     print("NEW RIDGE Between Ridge Vertices", len(ret_vertices)-2, "and",len(ret_vertices)-1)  
-            #     ret_ridges.append([len(ret_vertices)-2, len(ret_vertices)-1]) 
-
 
             
             print("\tMidpoint:", midpoint)
@@ -366,9 +442,6 @@ def generate_voronoi_data(points, width=1, height=1):
             intersections.sort(key=lambda p: (p[0] - x1)**2 + (p[1] - y1)**2)
             print("\tIntersections:", np.asarray(intersections))
             intersect_point = 0
-
-
-
 
 
             # Find Angles
@@ -447,12 +520,18 @@ def generate_voronoi_data(points, width=1, height=1):
             print("NEW RIDGE Between Ridge Vertices", index, "and",len(ret_vertices))  
             vertex_dict[index].append(len(ret_vertices))  
             vertex_dict[len(ret_vertices)].append(index)
+            
+            add_ridges_to_point_regions(len(ret_vertices), index, pointidx, my_polygon_data, my_polygon_data_advanced, vertex_region_dict)
             ret_vertices.append(np.asarray(intersections[intersect_point]))
             vor.vertices = np.append(vor.vertices, [intersections[intersect_point]], axis=0)
             ret_ridges.append([index, len(ret_vertices)-1])
 
-    edges = add_frame_edges(ret_vertices, ret_ridges)
-    vertex_dict = add_edges_to_vertices(vertex_dict, edges)
+    edges = add_frame_edges(ret_vertices)
+    vertex_dict = add_edges_to_vertices(vertex_dict, edges, vertex_region_dict)
+    
+    for data in my_polygon_data_advanced:
+        print("Data:", data)
+        print("\t", my_polygon_data_advanced[data])
 
 
     print("Vertex Adjacency Matrix:")
@@ -460,12 +539,18 @@ def generate_voronoi_data(points, width=1, height=1):
         print("\t", vertex, np.asarray(vertex_dict[vertex]))
 
 
+    polygons = sort_polygon_data(my_polygon_data, my_polygon_data_advanced)
+
 
     # TODO:  Assess why this sometimes doesn't return 3 elements
     # TODO:  See if we can return the voronoi objects instead of maintaining both simultaneously
     # TODO:  See if we can convert this into polygon shapes 
     print("RETURNING:\nPOINTS", ret_points, "\nVERTICES", ret_vertices, "\nRIDGES", ret_ridges)
-    return (ret_points, ret_vertices, ret_ridges, vor.regions)
+    return (ret_points, ret_vertices, ret_ridges, polygons)
+
+
+
+
 
 def generate_voronoi_plot(points, vertices, ridges, regions, width=1000, height=1000):
     # Create figure and axis
@@ -512,12 +597,14 @@ def generate_voronoi_plot(points, vertices, ridges, regions, width=1000, height=
 
 
     print("REGIONS:")
-    for region in regions:
-        print("\tRegion:", region)
+    for j, region in enumerate(regions):
+        print("\tRegion", j, ":", region)
+        ordered_region = list()
+        #ordered_region = sort_polygon_data(region, vertices)
         if len(region) > 0:  # Avoid empty regions
            # Scale vertices by width and height
            polygon = [(vertices[i][0] * width, vertices[i][1] * height) for i in region]
-           #print(polygon)
+           #print("\t\t", polygon)
            # Generate a random color for each region
            color = np.random.rand(3,)  # Random RGB color
            ax.fill(*zip(*polygon), facecolor=color, alpha=0.3)
