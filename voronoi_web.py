@@ -1,15 +1,21 @@
 from collections import defaultdict
+import enum
 from math import pi
 import os
 from flask import Flask, request, jsonify, render_template_string
 import numpy as np
 from scipy.spatial import Voronoi
 import matplotlib
+
+import MyVoronoi
 matplotlib.use('Agg')  # Set matplotlib to non-interactive mode
 import matplotlib.pyplot as plt
 from io import BytesIO
 import base64
 from voronoi_functions import generate_voronoi_data, generate_voronoi_plot
+from voronoi_functions_clean import generate_voronoi_data_clean, generate_voronoi_plot_clean
+
+
 
 # Set matplotlib backend explicitly
 os.environ['MPLBACKEND'] = 'Agg'
@@ -65,19 +71,45 @@ HTML_TEMPLATE = '''
 def index():
     # Generate initial diagram with 10 points
     #diagram_data = generate_voronoi_diagram(10)
-    (points, vertices, ridges, regions) = generate_voronoi_data(10)
+    points_data = np.random.uniform(0.01, [0.99, 0.99], (10, 2))
+    
+    (points, vertices, ridges, regions) = generate_voronoi_data(points_data)
     diagram_data = generate_voronoi_plot(points, vertices, ridges, regions, 1000, 1000)
+    generate_voronoi_data_clean(points_data)
+    
     return render_template_string(HTML_TEMPLATE, diagram_data=diagram_data)
 
 @app.route('/generate')
 def generate():
-    points = int(request.args.get('points', 10))
+    input_points = int(request.args.get('points', 10))
     #diagram_data = generate_voronoi_diagram(points)
-    (points, vertices, ridges, regions) = generate_voronoi_data(points)
-    diagram_data = generate_voronoi_plot(points, vertices, ridges, regions, 1000, 1000)
-    return jsonify({'diagram': diagram_data})
+    points_data = np.random.uniform(0.01, [0.99, 0.99], (input_points, 2))
+    #(points, vertices, ridges, regions) = generate_voronoi_data(points_data)
+
+    points_arr, vertices_arr, ridges_arr, diagram_data_clean = generate_voronoi_data_clean(points_data)
+
+    # print("Points Length:", len(points), "Points_arr Length:", len(points_arr))
+    # for i, p in enumerate(points):
+    #     print("\t", "Point", i, ":", p)
+    # for i, p in enumerate(points_arr):
+    #     print("\t", "Point", i, ":", p)
+    # print("Vertices Length:", len(vertices), "Vertices_arr Length:", len(vertices_arr))
+    # for i, v in enumerate(vertices):
+    #     print("\t", "Vertex", i, ":", v)
+    # for i, v in enumerate(vertices_arr):
+    #     print("\t", "Vertex", i, ":", v)
+    # print("Ridges Length:", len(ridges), "Ridges_arr Length:", len(ridges_arr))
+    # for i, r in enumerate(ridges):
+    #     print("\t", "Ridge", i, ":", r)
+    # for i, r in enumerate(ridges_arr):
+    #     print("\t", "Ridge", i, ":", r)
+
+    #diagram_data = generate_voronoi_plot(points, vertices, ridges, regions, 1000, 1000)
+
+    #diagram_data_clean = generate_voronoi_plot_clean(points_arr, vertices_arr, ridges_arr, regions, 1000, 1000)
+    return jsonify({'diagram': diagram_data_clean})
 
 if __name__ == '__main__':
     from flask_cors import CORS
     CORS(app)
-    app.run(debug=True, host='127.0.0.1', port=5000)
+    app.run(debug=True, host='127.0.0.1', port=5002)

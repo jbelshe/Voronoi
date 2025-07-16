@@ -8,6 +8,7 @@ matplotlib.use('Agg')  # Set matplotlib to non-interactive mode
 import matplotlib.pyplot as plt
 from io import BytesIO
 import base64
+import MyVoronoi as mv
 
 def angle_between_vectors(v1, v2):
     """Calculate the angle in radians between two vectors v1 and v2."""
@@ -217,11 +218,12 @@ def generate_voronoi_data(points, width=1, height=1):
     print("generate_voronoi_data()")
     """Generate Voronoi diagram and return it as a base64 encoded image."""
     # Create random points
-    points_data = np.random.uniform(0.01, [width-(width*0.10), height-(height*0.10)], (points, 2))
+    points_data = points # np.random.uniform(0.01, [width-(width*0.10), height-(height*0.10)], (points, 2))
     
     # Create Voronoi diagram
     vor = Voronoi(points_data)
     
+    #my_voronoi = mv.MyVoronoi(vor.points, vor.vertices, vor.ridge_vertices, vor.ridge_points)
 
     vertex_region_dict = defaultdict(set)
     vertex_dict = defaultdict(list) 
@@ -253,6 +255,7 @@ def generate_voronoi_data(points, width=1, height=1):
         print(i, ":", vertex)
         vertex_dict[i] = list()
         ret_vertices.append(vertex)
+
     #ret_vertices = np.asarray(vor.vertices)
     ret_ridges = list()
 
@@ -301,13 +304,15 @@ def generate_voronoi_data(points, width=1, height=1):
                     
                 for intersection in intersections:
                     print("\t1).  NEW RIDGE VERTEX #", len(ret_vertices), ":", np.asarray(intersection))
+                    
                     ret_vertices.append(np.asarray(intersection))
                     vor.vertices = np.append(vor.vertices, [intersection], axis=0)
-                    vor.ridge_vertices[i] = [len(ret_vertices)-2, len(ret_vertices)-1]
-                print("\t1).  NEW RIDGE Between Ridge Vertices", len(ret_vertices)-1, "and", len(ret_vertices))  
+                print("\t1).  NEW RIDGE Between Ridge Vertices", len(ret_vertices)-2, "and", len(ret_vertices)-1)  
                 new_vertex_index1 = len(ret_vertices) - 2
                 new_vertex_index2 = len(ret_vertices) - 1
+
                 ret_ridges.append([new_vertex_index1, new_vertex_index2])
+
                 ridge_dict[new_vertex_index2].append(new_vertex_index1)
                 ridge_dict[new_vertex_index1].append(new_vertex_index2)
                 vertex_dict[new_vertex_index2].append(new_vertex_index1)
@@ -325,12 +330,15 @@ def generate_voronoi_data(points, width=1, height=1):
                         ret_vertices.append(np.asarray(intersect))  
 
                         vor.vertices = np.append(vor.vertices, [intersect], axis=0)
-                        vor.ridge_vertices[i] = [simplex[replace_simplex], len(ret_vertices)-1]
+                        #vor.ridge_vertices[i] = [simplex[replace_simplex], len(ret_vertices)-1]
                         if replace_simplex == 0:  # if the OB vertex is the first one
                             print("\t2). NEW RIDGE Between Ridge Vertices: ", simplex[1], "to", len(ret_vertices)-1)
                             new_vertex_index = len(ret_vertices) - 1
+
                             vor.ridge_vertices[i] = [simplex[1], new_vertex_index]
                             ret_ridges.append([simplex[1], new_vertex_index])
+                            print("CHECK: Adding Ridge", [int(simplex[1]), int(new_vertex_index)], "with points", ridge_pts)
+                           
                             ridge_dict[simplex[1]].append(new_vertex_index)
                             ridge_dict[new_vertex_index].append(simplex[1])
                             vertex_dict[simplex[1]].append(new_vertex_index)
@@ -342,8 +350,12 @@ def generate_voronoi_data(points, width=1, height=1):
                         else:  # if the OB vertex is the second one
                             print("\t2). NEW RIDGE Between Ridge Vertices: ", simplex[0], "to", len(ret_vertices)-1)
                             new_vertex_index = len(ret_vertices)-1
+
                             vor.ridge_vertices[i] = [simplex[0], new_vertex_index]
                             ret_ridges.append([simplex[0], new_vertex_index])
+                            print("CHECK: Adding Ridge", [int(simplex[1]), int(new_vertex_index)], "with points", ridge_pts)
+                           
+
                             ridge_dict[simplex[0]].append(new_vertex_index)
                             ridge_dict[new_vertex_index].append(simplex[0])
                             vertex_dict[simplex[0]].append(new_vertex_index)
@@ -362,6 +374,7 @@ def generate_voronoi_data(points, width=1, height=1):
                 vertex_dict[simplex[0]].append(int(simplex[1]))
                 vertex_dict[simplex[1]].append(int(simplex[0]))
                 ret_ridges.append(simplex)
+
                 
         else:
             print("\t", simplex)
@@ -407,19 +420,19 @@ def generate_voronoi_data(points, width=1, height=1):
 
     # Plot infinite ridges with clipping
     center = points_data.mean(axis=0)
-
-    for pointidx, simplex in zip(vor.ridge_points, vor.ridge_vertices):
-        simplex = np.asarray(simplex)
-        print("\n\nRidge Vertices:", simplex, " for Ridge Points:", pointidx)
-        if np.any(simplex < 0):
-            index = simplex[simplex >= 0][0]
+    for ridge_pts, ridge_vts in zip(vor.ridge_points, vor.ridge_vertices):
+        ridge_vts = np.asarray(ridge_vts)
+        print("\n\nRidge Vertices:", ridge_vts, " for Ridge Points:", ridge_pts)
+        if np.any(ridge_vts < 0):
+            index = ridge_vts[ridge_vts >= 0][0] # set index to the positive vertex index
             print("\tPoint", index, "->", vor.vertices[index])
             print("\t\tAdjacent Ridge Verts:", np.asarray(ridge_dict[index]))
             adjacent_verts = ridge_dict[index] 
-            t = points_data[pointidx[1]] - points_data[pointidx[0]]
+            t = points_data[ridge_pts[1]] - points_data[ridge_pts[0]]
             t = t / np.linalg.norm(t)
             n = np.array([-t[1], t[0]])
-            midpoint = points_data[pointidx].mean(axis=0)
+            print("CHECK POITNS:", points_data[ridge_pts])
+            midpoint = points_data[ridge_pts].mean(axis=0)
             far_point = vor.vertices[index] + np.sign(np.dot(midpoint - center, n)) * n * 1000
             
             x1, y1 = vor.vertices[index]
@@ -454,9 +467,9 @@ def generate_voronoi_data(points, width=1, height=1):
                     if vert == -1:
                         infinite_count += 1
                         other_point = intersections[0]
-                    elif vert < -1:
-                        print("\tVert:", vert, "->", np.asarray(new_vertices[vert]))
-                        other_point = new_vertices[vert][0]
+                    # elif vert < -1:
+                    #     print("\tFUCKFUCKFUCKVert:", vert, "->", np.asarray(new_vertices[vert]))
+                    #     other_point = new_vertices[vert][0]
                     else:
                         other_point = vor.vertices[vert]
                     vectors.append(np.array([other_point[0] - center_point[0], other_point[1] - center_point[1]]))
@@ -514,6 +527,7 @@ def generate_voronoi_data(points, width=1, height=1):
                         print(f"\t[RECALC] Angle Sum: {anglesum:.6f} rad, {anglesum_deg:.2f} deg")
                         if abs(anglesum - 2 * np.pi) > tolerance:
                             print("\t[WARNING] Even after switching intersection, angles do not sum to 360 degrees!")
+                            points = np.random.uniform(0.01, [width-(width*0.10), height-(height*0.10)], (len(points), 2))
                             return generate_voronoi_data(points, width, height)
             
             print("NEW RIDGE VERTEX #", len(ret_vertices), ":", np.asarray(intersections[intersect_point]))  
@@ -521,11 +535,11 @@ def generate_voronoi_data(points, width=1, height=1):
             vertex_dict[index].append(len(ret_vertices))  
             vertex_dict[len(ret_vertices)].append(index)
             
-            add_ridges_to_point_regions(len(ret_vertices), index, pointidx, my_polygon_data, my_polygon_data_advanced, vertex_region_dict)
+            add_ridges_to_point_regions(len(ret_vertices), index, ridge_pts, my_polygon_data, my_polygon_data_advanced, vertex_region_dict)
             ret_vertices.append(np.asarray(intersections[intersect_point]))
             vor.vertices = np.append(vor.vertices, [intersections[intersect_point]], axis=0)
             ret_ridges.append([index, len(ret_vertices)-1])
-
+            
     edges = add_frame_edges(ret_vertices)
     vertex_dict = add_edges_to_vertices(vertex_dict, edges, vertex_region_dict)
     
