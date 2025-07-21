@@ -1,6 +1,7 @@
 from collections import defaultdict
 import enum
 from math import pi
+from this import s
 import numpy as np
 from scipy.spatial import Voronoi
 import matplotlib
@@ -14,7 +15,6 @@ from io import BytesIO
 
 #TODO:
 # Create ridges between edges for MyVoronoi
-# Remove vertices out of frame from adjacency measurements.  Never add?
 
 
 def angle_between_vectors(v1, v2):
@@ -43,6 +43,9 @@ def calculate_angles(V1, V2, V3):
     angle_P1_P3 = angle_between_vectors(V1, V3)
     
     return angle_P1_P2, angle_P2_P3, angle_P1_P3
+
+def find_distance_between_points(x1, y1, x2, y2):
+    return np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
 
 
 def find_border_intersections(x1, y1, x2, y2, width, height):
@@ -108,7 +111,9 @@ def add_frame_edges(my_voronoi):
     # sort horizontal access by x access
     edges[2] = sorted(edges[2], key=lambda k: my_voronoi.get_vertex_xy(k)[0])
     edges[3] = sorted(edges[3], key=lambda k: my_voronoi.get_vertex_xy(k)[0])
-
+    print("Sorted Edges:")
+    for edge in edges:
+        print("\t", edge)
 
     for edge in edges:
         for i in range(len(edge)-1):
@@ -120,8 +125,11 @@ def add_frame_edges(my_voronoi):
                 print("\tRidge Points: ", my_voronoi.get_vertex_adjacent_points(edge[i+1]))
                 print("\tCombo:", common_region)
                 my_voronoi.add_ridge([edge[i], edge[i+1]], list(common_region))
-            if edge[i] in corners or edge[i+1] in corners:
-                if edge[i] in corners:
+            else:  # if one of the edge vertices is a corner 
+                if edge[i] in corners and edge[i+1] in corners:
+                    print("WEIRD EDGE CASExx, ", edge[i], edge[i+1])
+                    continue
+                elif edge[i] in corners:
                     corner = edge[i]
                     not_corner = edge[i+1]
                 else:
@@ -132,8 +140,39 @@ def add_frame_edges(my_voronoi):
                 #my_voronoi.add_ridge([my_voronoi.get_vertex_xy(edge[i]), my_voronoi.get_vertex_xy(edge[i+1])])
     print("CORNERS:", corner_neighbors)
     for corner in corner_neighbors:
-        #print("\t", corner, " : ", corner_neighbors[corner][0].intersection(corner_neighbors[corner][1]))
-        corner_regions[corner] = corner_neighbors[corner][0].intersection(corner_neighbors[corner][1])
+        # if the corner adjacents are connected determine, which point to add based on distance from corner to points
+        #TODO:  Determine why sometimes there is only one set of corner_neighbor points
+        if len(corner_neighbors[corner]) > 1:
+            x = list(corner_neighbors[corner][0].intersection(corner_neighbors[corner][1])) # get the intersection
+            print("X:", x)
+            if corner_neighbors[corner][0] == corner_neighbors[corner][1]: 
+                x1, y1 = my_voronoi.get_vertex_xy(corner)
+                x2, y2 = my_voronoi.get_point_xy(x[0])
+                x3, y3 = my_voronoi.get_point_xy(x[1])
+                d1 = find_distance_between_points(x1, y1, x2, y2)
+                d2 = find_distance_between_points(x1, y1, x3, y3)
+                if d1 < d2:
+                    corner_regions[corner] = [x[0]]
+                else:
+                    corner_regions[corner] = [x[1]]
+                print("RESOLVED?")
+            else:
+                corner_regions[corner] = x
+        else:
+            print("Corner Neighbors:", corner_neighbors[corner])
+            v = list(corner_neighbors[corner][0])  
+            print("WEIRD EDGE CASE, ", v)
+            x1, y1 = my_voronoi.get_vertex_xy(corner)
+            x2, y2 = my_voronoi.get_point_xy(v[0])
+            x3, y3 = my_voronoi.get_point_xy(v[1])
+            d1 = find_distance_between_points(x1, y1, x2, y2)
+            d2 = find_distance_between_points(x1, y1, x3, y3)
+            if d1 < d2:
+                corner_regions[corner] = [v[0]]
+            else:
+                corner_regions[corner] = [v[1]]
+            print("RESOLVED?")
+            #corner_regions[corner] = corner_neighbors[corner][0]
     for edge in edges:
         for i in range(len(edge)-1):
             if edge[i] in corners or edge[i+1] in corners:
@@ -141,52 +180,13 @@ def add_frame_edges(my_voronoi):
                     corner = edge[i]
                 else:
                     corner = edge[i+1]
+                print("Adding:", edge[i], edge[i+1], corner_regions[corner])
                 my_voronoi.add_ridge([edge[i], edge[i+1]], list(corner_regions[corner]))
                 
     for edge in edges:  
         print("EDGE:", edge)
     
     return 1
-
-
-# def add_edges_to_vertices(vertex_dict, edges, vertex_region_dict):
-#     print("Vertex-to-region")
-#     for vertex in vertex_region_dict:
-#         print("\tVertex:", vertex, "region:", vertex_region_dict[vertex])
-#     for edge in edges:
-#         for i in range(len(edge)-1):
-#             vertex_dict[edge[i]].append(edge[i+1])
-#             vertex_dict[edge[i+1]].append(edge[i])
-#     return vertex_dict
-
-
-# def add_ridges_to_point_regions(ridge_vertex1, ridge_vertex2, ridge_points, my_polygon_data, my_polygon_data_advanced, vertex_region_dict):
-#     polygon_point1 = ridge_points[0]
-#     polygon_point2 = ridge_points[1]
-#     ridge_vertex1 = int(ridge_vertex1)
-#     ridge_vertex2 = int(ridge_vertex2)
-    
-    
-#     # Index = Voronoi Point, value = set of vertices belonging to point's polygon
-#     my_polygon_data[polygon_point1].add(ridge_vertex1)
-#     my_polygon_data[polygon_point1].add(ridge_vertex2)
-#     my_polygon_data[polygon_point2].add(ridge_vertex1)
-#     my_polygon_data[polygon_point2].add(ridge_vertex2)
-
-#     # index = vertex, value = set of polygons point connects to
-#     vertex_region_dict[int(ridge_vertex1)].add(int(polygon_point1))
-#     vertex_region_dict[int(ridge_vertex2)].add(int(polygon_point1))
-#     vertex_region_dict[int(ridge_vertex1)].add(int(polygon_point2))
-#     vertex_region_dict[int(ridge_vertex2)].add(int(polygon_point2))
-
-#     # my_polygon_data_advanced[polygon_point1] = defaultdict(list)
-#     # my_polygon_data_advanced[polygon_point2] = defaultdict(list)
-    
-#     my_polygon_data_advanced[polygon_point1][ridge_vertex1].append((ridge_vertex1, ridge_vertex2))
-#     my_polygon_data_advanced[polygon_point1][ridge_vertex2].append((ridge_vertex2, ridge_vertex1))
-
-#     my_polygon_data_advanced[polygon_point2][ridge_vertex1].append((ridge_vertex1, ridge_vertex2))
-#     my_polygon_data_advanced[polygon_point2][ridge_vertex2].append((ridge_vertex2, ridge_vertex1))
 
 
 
@@ -230,9 +230,6 @@ def correct_finite_ridges(my_voronoi):
                 my_voronoi.update_ridge_in_region(ridge_pts, ridge_vts[0], ridge_vts[1])
                 my_voronoi.add_ridge([int(vertex_id1), int(vertex_id2)], ridge_pts)
 
-                # for intersection in intersections:
-                #     print("\t1).  NEW RIDGE VERTEX #", len(ret_vertices), ":", np.asarray(intersection))
-                #     vor.vertices = np.append(vor.vertices, [intersection], axis=0)
                 print("\t1).  NEW RIDGE Between Ridge Vertices", vertex_id1, "and", vertex_id2)  
 
 
@@ -268,17 +265,6 @@ def correct_finite_ridges(my_voronoi):
                         
                         my_voronoi.update_ridge_in_region(ridge_pts, safe_vertex, replaced_vertex)
                         print("CHECK: Adding Ridge", [int(safe_vertex), int(vertex_id)], "with points", ridge_pts)
-                        
-
-
-                        #ridge_dict[ridge_vts[0]].append(new_vertex_index)
-                        #ridge_dict[new_vertex_index].append(ridge_vts[0])
-                        #vertex_dict[ridge_vts[0]].append(new_vertex_index)
-                        #vertex_dict[new_vertex_index].append(int(ridge_vts[0]))
-                        #point_x, point_y = tuple(sorted(my_voronoi.ridges[i].points))
-                        #point_x, point_y = tuple(sorted(vor.ridge_points[i]))
-                        #ridge_points_dict[tuple(sorted((ridge_vts[1], new_vertex_index)))] = {int(point_x), int(point_y)}
-                        #add_ridges_to_point_regions(ridge_vts[1], new_vertex_index, vor.ridge_points[i], my_polygon_data, my_polygon_data_advanced, vertex_region_dict)
                         
 
                     else:  # intersection is on the other side and not between desired points
@@ -339,7 +325,6 @@ def correct_infinite_vertices(my_voronoi):
             print("\tIntersections:", np.asarray(intersections))
             intersect_point = 0
             
-            # ret_ridges.append([index, len(ret_vertices)-1])
             #my_voronoi.add_ridge((index, len(my_voronoi.vertices)), ridge_pts)
             new_vertex_id = my_voronoi.add_vertex(intersections[0][0], intersections[0][1], ridge_pts)
             #print("Setting Rdige:", index)
@@ -431,17 +416,11 @@ def correct_infinite_vertices(my_voronoi):
                         print(f"\t[RECALC] Angle Sum: {anglesum:.6f} rad, {anglesum_deg:.2f} deg")
                         if abs(anglesum - 2 * np.pi) > tolerance:
                             print("\t[WARNING] Even after switching intersection, angles do not sum to 360 degrees!")
-                            points = np.random.uniform(0.01, [width-(width*0.10), height-(height*0.10)], (len(points), 2))
-                            return generate_voronoi_data_clean(points, width, height)
+                            points = np.random.uniform(0.01, [my_voronoi.width-(my_voronoi.width*0.10), my_voronoi.height-(my_voronoi.height*0.10)], (len(my_voronoi.points), 2))
+                            return generate_voronoi_data_clean(points, my_voronoi.width, my_voronoi.height)
             
             print("NEW RIDGE VERTEX #", new_vertex_id, ":", np.asarray(intersections[intersect_point]))  
             print("NEW RIDGE Between Ridge Vertices", index, "and", new_vertex_id)  
-            #vertex_dict[index].append(len(ret_vertices))  
-            #vertex_dict[len(ret_vertices)].append(index)
-            
-            #add_ridges_to_point_regions(len(ret_vertices), index, ridge_pts, my_polygon_data, my_polygon_data_advanced, vertex_region_dict)
-            #ret_vertices.append(np.asarray(intersections[intersect_point]))
-            #vor.vertices = np.append(vor.vertices, [intersections[intersect_point]], axis=0)
             
     return my_voronoi
 
@@ -470,11 +449,6 @@ def generate_voronoi_data_clean(points, width=1, height=1):
     correct_infinite_vertices(my_voronoi)
 
     edges = add_frame_edges(my_voronoi)
-    # add_edges_to_vertices(my_voronoi, edges)
-    #vertex_dict = add_edges_to_vertices(vertex_dict, edges, vertex_region_dict)
-
-    #edges = add_frame_edges(ret_vertices)
-    #vertex_dict = add_edges_to_vertices(vertex_dict, edges, vertex_region_dict)
 
 
     my_voronoi.print_voronoi()
@@ -501,24 +475,25 @@ def generate_voronoi_data_clean(points, width=1, height=1):
 
 
 def generate_voronoi_plot_clean(my_voronoi):
+    """
+    Generate a Voronoi diagram plot from the given Voronoi data and return it as a base64 encoded image.
+
+    Parameters:
+    - my_voronoi: An instance of a Voronoi diagram object containing points, vertices, ridges, and regions.
+
+    Returns:
+    - A string representing the base64 encoded PNG image of the Voronoi diagram.
+    """
     # Create figure and axis
     fig, ax = plt.subplots(figsize=(8, 8))
     
     # Plot points
     print("DATA POINTS:")
     for point in my_voronoi.points:
-        ax.plot(point.x*my_voronoi.width, point.y*my_voronoi.height, 'bo')
+        ax.plot(point.x * my_voronoi.width, point.y * my_voronoi.height, 'bo')
         print("\tPoint ", point.index, ": (", point.x, point.y, ")")
         ax.text(point.x, point.y, str(point.index), color='blue', fontsize=12, fontweight='bold', ha='right', va='bottom')
 
-    
-    # # Number the points_data
-    # print("DATA POINTS:")
-    # for i, (x_raw, y_raw) in enumerate(my_voronoi.points):
-    #     x, y = x_raw * my_voronoi.width, y_raw * my_voronoi.height
-    #     print("\tPoint ", i, ": (", x, y, ")")
-    #     ax.text(x, y, str(i), color='blue', fontsize=12, fontweight='bold', ha='right', va='bottom')
-    
     # Plot vertices with different colors
     colors = ['r', 'g', 'c', 'm', 'y', 'k']
     print("Vertices (color coding):")
@@ -529,7 +504,7 @@ def generate_voronoi_plot_clean(my_voronoi):
         print(f"\t{i} : {x, y} (color: {color})")
         ax.plot(x, y, color + 'o')
         ax.text(x, y, str(i), color=color, fontsize=10, fontweight='bold', ha='right', va='bottom')
-    
+
     
     print("RIDGES:")
     # Plot ridges
@@ -547,34 +522,24 @@ def generate_voronoi_plot_clean(my_voronoi):
                 continue
             else:
                 ax.plot([x1, x2], [y1, y2], 'k-')
-        # simplex = np.asarray(simplex)
-        # if np.all(simplex >= 0):
-        #     x1, y1 = my_voronoi.get_ridg
-        #     vertices[simplex[0]][0] * width, vertices[simplex[0]][1] * height
-        #     x2, y2 = vertices[simplex[1]][0] * width, vertices[simplex[1]][1] * height
-        #     print("\t", simplex, '-', f"({x1}, {y1}), ({x2}, {y2})")
-        #     if    x1 >= width and x2 >= width or \
-        #         y1 >= height and y2 >= height or \
-        #         x1 <= 0 and x2 <= 0 or \
-        #         y1 <= 0 and y2 <= 0:
-        #         print("\tPSYCH! I AINT PLOTTING - ", simplex)
-        #         continue
-        #     else:
-        #         ax.plot([x1, x2], [y1, y2], 'k-')
 
 
-    # print("REGIONS:")
-    # for j, region in enumerate(regions):
-    #     print("\tRegion", j, ":", region)
-    #     ordered_region = list()
-    #     #ordered_region = sort_polygon_data(region, vertices)
-    #     if len(region) > 0:  # Avoid empty regions
-    #        # Scale vertices by width and height
-    #        polygon = [(vertices[i][0] * width, vertices[i][1] * height) for i in region]
-    #        #print("\t\t", polygon)
-    #        # Generate a random color for each region
-    #        color = np.random.rand(3,)  # Random RGB color
-    #        ax.fill(*zip(*polygon), facecolor=color, alpha=0.3)
+    print("REGIONS:")
+    for j, region in enumerate(my_voronoi.regions):
+        print("\tRegion", j, ":", region)
+        try:
+            ordered_region = my_voronoi.get_ordered_region(region)
+        except:
+            print("THROW FAIL")
+            continue    
+        #ordered_region = sort_polygon_data(region, vertices)
+        if len(ordered_region) > 0:  # Avoid empty regions
+        #    # Scale vertices by width and height
+            polygon = [(my_voronoi.get_vertex_xy(i)[0] * my_voronoi.width, my_voronoi.get_vertex_xy(i)[1] * my_voronoi.height) for i in ordered_region]
+            #print("\t\t", polygon)
+            # Generate a random color for each region
+            color = np.random.rand(3,)  # Random RGB color
+            ax.fill(*zip(*polygon), facecolor=color, alpha=0.3)
 
     # Set plot limits and aspect
     ax.set_xlim(0, my_voronoi.width)

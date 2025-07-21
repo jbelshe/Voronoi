@@ -84,7 +84,6 @@ def generate():
     input_points = int(request.args.get('points', 10))
     #diagram_data = generate_voronoi_diagram(points)
     points_data = np.random.uniform(0.01, [0.99, 0.99], (input_points, 2))
-    #(points, vertices, ridges, regions) = generate_voronoi_data(points_data)
 
     points_arr, vertices_arr, ridges_arr, diagram_data_clean = generate_voronoi_data_clean(points_data)
 
@@ -104,9 +103,10 @@ def generate():
     # for i, r in enumerate(ridges_arr):
     #     print("\t", "Ridge", i, ":", r)
 
-    #diagram_data = generate_voronoi_plot(points, vertices, ridges, regions, 1000, 1000)
+    # (points, vertices, ridges, regions) = generate_voronoi_data(points_data)
+    # diagram_data = generate_voronoi_plot(points, vertices, ridges, regions, 1000, 1000)
+    # return jsonify({'diagram': diagram_data})
 
-    #diagram_data_clean = generate_voronoi_plot_clean(points_arr, vertices_arr, ridges_arr, regions, 1000, 1000)
     return jsonify({'diagram': diagram_data_clean})
 
 if __name__ == '__main__':

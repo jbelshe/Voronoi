@@ -110,19 +110,30 @@ class MyVoronoi:
     def get_ordered_region(self, region: Region) -> List[int]:
         ordered_region = list()
         visited = set()
-        curr_node = None
-        for vert in region.vertices:
-            if curr_node == None:
-                ordered_region.append(vert)
-                visited.add(vert)
-                curr_node = region.ridge_adjacency[vert][0]
-            # else:
+        curr_node = region.vertices.pop()
+        region.vertices.add(curr_node)
+        region_size = len(region.vertices) - len(region.deleted_vertices)
+        while len(ordered_region) < region_size:
+            x, y = self.get_vertex_xy(curr_node)
+            #print("IS OUT OF BOUNDS:", self.is_out_of_bounds_xy(x, y))
+            if curr_node in region.deleted_vertices or self.is_out_of_bounds_xy(x, y):
+                curr_node = region.vertices.pop()
+                region.vertices.add(curr_node)  
+                continue
+            
+            #print("Checking:", curr_node, "Visited:", visited, "Curr_Size:", len(ordered_region), "Neighbours:", region.ridge_adjacency[curr_node])
+            ordered_region.append(curr_node)
+            visited.add(curr_node)
+            for neighbor in region.ridge_adjacency[curr_node]:
+                if neighbor not in visited:
+                    curr_node = neighbor
+                    continue   
+            
+            if len(region.ridge_adjacency[curr_node]) > 2:
+                print("ERROR - Region", region.id, "has more than 2 adjacents at vertex", curr_node)
+                exit(1)
 
-
-
-                
-
-
+        print("Ordered Region:", ordered_region)
         return ordered_region
 
 
@@ -198,6 +209,9 @@ class MyVoronoi:
         """Remove the adjacent vertex for a given ridge."""
         print("Removing Vertex", vertex, "from Ridge", index, "->", self.ridge_dict[index])
         self.ridge_dict[index].remove(vertex)
+
+    def is_out_of_bounds_xy(self, x: float, y: float) -> bool:
+        return x < 0 or x > self.width or y < 0 or y > self.height
 
 
     def print_points(self):
