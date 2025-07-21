@@ -8,6 +8,7 @@ class Vertex:
     """Represents a vertex in the Voronoi diagram."""
     x: float
     y: float
+    adjacent_points: Set[int]
     index: int
     
 @dataclass
@@ -21,7 +22,7 @@ class Point:
 class Ridge:
     """Represents a ridge (edge) between two Voronoi cells."""
     vertices: Tuple[int, int]
-    points: Tuple[int, int]
+    points: List[int]
 
 @dataclass
 class Region:
@@ -50,8 +51,9 @@ class MyVoronoi:
             
         for rv, rp in zip(ridge_vertices, ridge_points):
             self.add_ridge(rv, rp)
+            self.add_vertex_points(rv[0], rp)
+            self.add_vertex_points(rv[1], rp)
             
-
         self.print_voronoi()
         
 
@@ -75,13 +77,20 @@ class MyVoronoi:
         return region.id
 
         
-    def add_vertex(self, x: float, y: float) -> int:
+    def add_vertex(self, x: float, y: float, points_indices: Tuple[int, int] = None) -> int:
         """Add a new vertex to the diagram and return its index."""
-        vertex = Vertex(x=x, y=y, index=len(self.vertices))
+        vertex = Vertex(x=x, y=y, index=len(self.vertices), adjacent_points=set())
         self.vertices.append(vertex)
+        if points_indices is not None:
+            self.add_vertex_points(len(self.vertices) - 1, points_indices)
         return len(self.vertices) - 1
+
+    def add_vertex_points(self, vertex_index: int, point_indices: Tuple[int, int]):
+        """Add a new vertex to the diagram and return its index."""
+        self.vertices[vertex_index].adjacent_points.add(int(point_indices[0]))
+        self.vertices[vertex_index].adjacent_points.add(int(point_indices[1]))
         
-    def add_ridge(self, vertex_indices: Tuple[int, int], point_indices: Tuple[int, int]) -> int:
+    def add_ridge(self, vertex_indices: Tuple[int, int], point_indices: List[int]) -> int:
         """Add a new ridge between two vertices."""
 
         ridge = Ridge(
@@ -98,15 +107,31 @@ class MyVoronoi:
         return len(self.ridges) - 1
 
 
+    def get_ordered_region(self, region: Region) -> List[int]:
+        ordered_region = list()
+        visited = set()
+        curr_node = None
+        for vert in region.vertices:
+            if curr_node == None:
+                ordered_region.append(vert)
+                visited.add(vert)
+                curr_node = region.ridge_adjacency[vert][0]
+            # else:
+
+
+
+                
+
+
+        return ordered_region
+
+
     def upload_ridge_to_region(self, vertex_indices: Tuple[int, int], point_indices: Tuple[int, int]):
-        self.regions[point_indices[0]].ridge_adjacency[vertex_indices[0]].add(int(vertex_indices[1]))
-        self.regions[point_indices[0]].ridge_adjacency[vertex_indices[1]].add(int(vertex_indices[0]))
-        self.regions[point_indices[1]].ridge_adjacency[vertex_indices[1]].add(int(vertex_indices[0]))
-        self.regions[point_indices[1]].ridge_adjacency[vertex_indices[0]].add(int(vertex_indices[1]))
-        self.regions[point_indices[0]].vertices.add(int(vertex_indices[0]))
-        self.regions[point_indices[0]].vertices.add(int(vertex_indices[1]))
-        self.regions[point_indices[1]].vertices.add(int(vertex_indices[0]))
-        self.regions[point_indices[1]].vertices.add(int(vertex_indices[1]))
+        for point_index in point_indices: # Either one or two points in point indices 
+            self.regions[point_index].ridge_adjacency[vertex_indices[0]].add(int(vertex_indices[1]))
+            self.regions[point_index].ridge_adjacency[vertex_indices[1]].add(int(vertex_indices[0]))
+            self.regions[point_index].vertices.add(int(vertex_indices[0]))
+            self.regions[point_index].vertices.add(int(vertex_indices[1]))
 
 
     def update_ridge_in_region(self, point_indices: Tuple[int, int], vertex_index: int, old_index: int):
@@ -147,6 +172,10 @@ class MyVoronoi:
     def get_vertex_np(self, index: int) -> np.ndarray:
         """Get vertex x and y coordinates by index."""
         return np.array([self.vertices[index].x, self.vertices[index].y])
+
+    def get_vertex_adjacent_points(self, index: int) -> Set[int]:
+        """Get vertex adjacent points by index."""
+        return self.vertices[index].adjacent_points
         
     def get_ridge(self, index: int) -> Ridge:
         """Get ridge by index."""
@@ -188,7 +217,10 @@ class MyVoronoi:
         """Print the ridges in the diagram."""
         print("\n\nprint_ridges()")
         for i, ridge in enumerate(self.ridges):
-            print(f"\tRIDGE {i}). [{ridge.vertices[0]} to {ridge.vertices[1]}] - for points {ridge.points[0]} and {ridge.points[1]}")
+            if len(ridge.points) == 2:
+                print(f"\tRIDGE {i}). [{ridge.vertices[0]} to {ridge.vertices[1]}] - for points {ridge.points[0]} and {ridge.points[1]}")
+            else:
+                print(f"\tRIDGE {i}). [{ridge.vertices[0]} to {ridge.vertices[1]}] - for points {ridge.points[0]}")
 
 
     def print_regions(self):

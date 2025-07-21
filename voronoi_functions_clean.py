@@ -69,10 +69,25 @@ def find_border_intersections(x1, y1, x2, y2, width, height):
 
 
 def add_frame_edges(my_voronoi):
-    my_voronoi.add_vertex(0, 0)
-    my_voronoi.add_vertex(1, 0)
-    my_voronoi.add_vertex(1, 1)
-    my_voronoi.add_vertex(0, 1)
+    bottom_left = my_voronoi.add_vertex(0, 0)
+    bottom_right = my_voronoi.add_vertex(1, 0)
+    top_right = my_voronoi.add_vertex(1, 1)
+    top_left = my_voronoi.add_vertex(0, 1)
+    corners = {bottom_left, bottom_right, top_right, top_left}
+    corner_regions = {
+        bottom_left: None,
+        bottom_right: None,
+        top_right: None,
+        top_left: None
+
+    }
+
+    corner_neighbors = {
+        bottom_left: [],
+        bottom_right: [],
+        top_right: [],
+        top_left: []
+    }
     edges = [[],[],[],[]]  
     print("VERTEX:")
     for i in range(len(my_voronoi.vertices)):
@@ -95,12 +110,41 @@ def add_frame_edges(my_voronoi):
     edges[3] = sorted(edges[3], key=lambda k: my_voronoi.get_vertex_xy(k)[0])
 
 
-    # for edge in edges:
-    #     for i in range(len(edge)-1):
-    #         print("Adding Ridge from ", edge[i], "to ", edge[i+1])
-    #         my_voronoi.add_ridge([[my_voronoi.get_vertex_xy(edge[i]), my_voronoi.get_vertex_xy(edge[i+1])])
-    # for edge in edges:
-    #     print("EDGE:", edge)
+    for edge in edges:
+        for i in range(len(edge)-1):
+            print("Adding Ridge from ", edge[i], "to ", edge[i+1])
+            if edge[i] not in corners and edge[i+1] not in corners:
+                common_region = my_voronoi.get_vertex_adjacent_points(edge[i]).intersection(my_voronoi.get_vertex_adjacent_points(edge[i+1]))
+                print(list(common_region))
+                print("\tRidge Points: ", my_voronoi.get_vertex_adjacent_points(edge[i]))
+                print("\tRidge Points: ", my_voronoi.get_vertex_adjacent_points(edge[i+1]))
+                print("\tCombo:", common_region)
+                my_voronoi.add_ridge([edge[i], edge[i+1]], list(common_region))
+            if edge[i] in corners or edge[i+1] in corners:
+                if edge[i] in corners:
+                    corner = edge[i]
+                    not_corner = edge[i+1]
+                else:
+                    corner = edge[i+1]
+                    not_corner = edge[i]
+                not_corner_points = my_voronoi.get_vertex_adjacent_points(not_corner)
+                corner_neighbors[corner].append(not_corner_points)
+                #my_voronoi.add_ridge([my_voronoi.get_vertex_xy(edge[i]), my_voronoi.get_vertex_xy(edge[i+1])])
+    print("CORNERS:", corner_neighbors)
+    for corner in corner_neighbors:
+        #print("\t", corner, " : ", corner_neighbors[corner][0].intersection(corner_neighbors[corner][1]))
+        corner_regions[corner] = corner_neighbors[corner][0].intersection(corner_neighbors[corner][1])
+    for edge in edges:
+        for i in range(len(edge)-1):
+            if edge[i] in corners or edge[i+1] in corners:
+                if edge[i] in corners:
+                    corner = edge[i]
+                else:
+                    corner = edge[i+1]
+                my_voronoi.add_ridge([edge[i], edge[i+1]], list(corner_regions[corner]))
+                
+    for edge in edges:  
+        print("EDGE:", edge)
     
     return 1
 
@@ -180,10 +224,10 @@ def correct_finite_ridges(my_voronoi):
                     continue
                     
                 # Add both intersections to the list of vertices and ridge lists
-                vertex_id1 = my_voronoi.add_vertex(intersections[0][0], intersections[0][1])
-                vertex_id2 = my_voronoi.add_vertex(intersections[1][0], intersections[1][1])
-                #my_voronoi.update_ridge_in_region(ridge_pts, ridge_vts[1], ridge_vts[0])
-                #my_voronoi.update_ridge_in_region(ridge_pts, ridge_vts[0], ridge_vts[1])
+                vertex_id1 = my_voronoi.add_vertex(intersections[0][0], intersections[0][1], ridge_pts)
+                vertex_id2 = my_voronoi.add_vertex(intersections[1][0], intersections[1][1], ridge_pts)
+                my_voronoi.update_ridge_in_region(ridge_pts, ridge_vts[1], ridge_vts[0])
+                my_voronoi.update_ridge_in_region(ridge_pts, ridge_vts[0], ridge_vts[1])
                 my_voronoi.add_ridge([int(vertex_id1), int(vertex_id2)], ridge_pts)
 
                 # for intersection in intersections:
@@ -206,21 +250,24 @@ def correct_finite_ridges(my_voronoi):
 
                         #vor.vertices = np.append(vor.vertices, [intersect], axis=0)
                         #vor.ridge_vertices[i] = [ridge_vts[replace_ridge_vts], len(ret_vertices)-1]
-                        vertex_id = my_voronoi.add_vertex(intersect[0], intersect[1])
+                        vertex_id = my_voronoi.add_vertex(intersect[0], intersect[1], ridge_pts)
                         # TODO:  Determine if we keep line below
                         #my_voronoi.set_ridge_vertices(i, [ridge_vts[replace_ridge_vts], vertex_id])
                         print("\t2).  NEW (RIDGE) VERTEX #", vertex_id, ":", np.asarray(intersect))  
                         
                         #if replacement vertex is index 0, then the new vertex is index 1 and vice versa
                         safe_vertex_id = 1 - replace_ridge_vts 
+                        safe_vertex = ridge_vts[safe_vertex_id]
+                        replaced_vertex = ridge_vts[replace_ridge_vts]
+                        print("Changing Ridge Vertex: ", int(safe_vertex), "Before:", int(vertex_id))
+                        my_voronoi.set_ridge_vertices(i, [safe_vertex, vertex_id])
+                        print("Changing Ridge Vertex: ", int(safe_vertex), "After:", int(vertex_id))
+                        my_voronoi.add_ridge([int(safe_vertex), int(vertex_id)], ridge_pts)
+                        my_voronoi.remove_vertex_from_ridge_adj_dict(safe_vertex, replaced_vertex)
+                        my_voronoi.remove_vertex_from_ridge_adj_dict(replaced_vertex, safe_vertex)
                         
-                        print("Changing Ridge Vertex: ", int(ridge_vts[safe_vertex_id]), "Before:", int(vertex_id))
-                        my_voronoi.set_ridge_vertices(i, [ridge_vts[safe_vertex_id], vertex_id])
-                        print("Changing Ridge Vertex: ", int(ridge_vts[safe_vertex_id]), "After:", int(vertex_id))
-                        my_voronoi.add_ridge([int(ridge_vts[safe_vertex_id]), int(vertex_id)], ridge_pts)
-                        my_voronoi.remove_vertex_from_ridge_adj_dict(ridge_vts[safe_vertex_id], ridge_vts[replace_ridge_vts])
-                        my_voronoi.remove_vertex_from_ridge_adj_dict(ridge_vts[replace_ridge_vts], ridge_vts[safe_vertex_id])
-                        print("CHECK: Adding Ridge", [int(ridge_vts[safe_vertex_id]), int(vertex_id)], "with points", ridge_pts)
+                        my_voronoi.update_ridge_in_region(ridge_pts, safe_vertex, replaced_vertex)
+                        print("CHECK: Adding Ridge", [int(safe_vertex), int(vertex_id)], "with points", ridge_pts)
                         
 
 
@@ -294,7 +341,7 @@ def correct_infinite_vertices(my_voronoi):
             
             # ret_ridges.append([index, len(ret_vertices)-1])
             #my_voronoi.add_ridge((index, len(my_voronoi.vertices)), ridge_pts)
-            new_vertex_id = my_voronoi.add_vertex(intersections[0][0], intersections[0][1])
+            new_vertex_id = my_voronoi.add_vertex(intersections[0][0], intersections[0][1], ridge_pts)
             #print("Setting Rdige:", index)
             #my_voronoi.set_ridge_vertices(i, [ridge_vts[safe_vertex_id], vertex_id])
             my_voronoi.add_ridge((index, new_vertex_id), ridge_pts)
@@ -325,11 +372,11 @@ def correct_infinite_vertices(my_voronoi):
                 # if one vertex has two adjacent infinite vertices, add the most suggest version and exit
                 # the calculations will be done when the second infinite vertex is added, the infinite count will be 1 next time
                 if infinite_count == 2:
-                    temp_vertex_id = my_voronoi.add_vertex(intersections[0][0], intersections[0][1])
+                    temp_vertex_id = my_voronoi.add_vertex(intersections[0][0], intersections[0][1], ridge_pts)
                     my_voronoi.add_ridge((index, temp_vertex_id), ridge_pts)
                     my_voronoi.ridge_dict[index].append(temp_vertex_id)
                     my_voronoi.ridge_dict[temp_vertex_id].append(index)
-                    #my_voronoi.update_ridge_in_region(ridge_pts, index, )
+                    #my_voronoi.update_ridge_in_region(ridge_pts, index, temp_vertex_id)
                     print("Adding new vertex:", temp_vertex_id, " to system")
                     break
 
