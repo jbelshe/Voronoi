@@ -133,7 +133,6 @@ class MyVoronoi:
                 print("ERROR - Region", region.id, "has more than 2 adjacents at vertex", curr_node)
                 exit(1)
 
-        print("Ordered Region:", ordered_region)
         return ordered_region
 
 
@@ -230,11 +229,14 @@ class MyVoronoi:
     def print_ridges(self):
         """Print the ridges in the diagram."""
         print("\n\nprint_ridges()")
+        print("\tRidge Count:", len(self.ridges))
         for i, ridge in enumerate(self.ridges):
             if len(ridge.points) == 2:
                 print(f"\tRIDGE {i}). [{ridge.vertices[0]} to {ridge.vertices[1]}] - for points {ridge.points[0]} and {ridge.points[1]}")
-            else:
+            elif len(ridge.points) == 1:
                 print(f"\tRIDGE {i}). [{ridge.vertices[0]} to {ridge.vertices[1]}] - for points {ridge.points[0]}")
+            else:
+                print(f"\tRIDGE {i}). [{ridge.vertices[0]} to {ridge.vertices[1]}] - NO POINTS")
 
 
     def print_regions(self):

@@ -10,6 +10,30 @@ import base64
 import MyVoronoi as mv
 import matplotlib.pyplot as plt
 from io import BytesIO
+import time
+from functools import wraps
+
+# Enable/disable timing (set to False to disable timing output)
+ENABLE_TIMING = True
+
+def time_function(func):
+    """Decorator to time function execution."""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not ENABLE_TIMING:
+            return func(*args, **kwargs)
+            
+        start_time = time.perf_counter()
+        result = func(*args, **kwargs)
+        end_time = time.perf_counter()
+        
+        # Get function name and format arguments
+        func_name = func.__name__
+        arg_str = ', '.join([str(a) for a in args[1:]] + [f"{k}={v}" for k, v in kwargs.items()])
+        
+        print(f"{func_name}({arg_str}) took {end_time - start_time:.6f} seconds")
+        return result
+    return wrapper
 
 
 
@@ -17,6 +41,7 @@ from io import BytesIO
 # Create ridges between edges for MyVoronoi
 
 
+@time_function
 def angle_between_vectors(v1, v2):
     """Calculate the angle in radians between two vectors v1 and v2."""
     # Compute dot product and magnitudes of the vectors
@@ -35,6 +60,7 @@ def angle_between_vectors(v1, v2):
     return angle
 
 
+@time_function
 def calculate_angles(V1, V2, V3):
     """Calculate the angles between point P and three other points P1, P2, and P3."""
     # Calculate the angles between the vectors
@@ -44,10 +70,12 @@ def calculate_angles(V1, V2, V3):
     
     return angle_P1_P2, angle_P2_P3, angle_P1_P3
 
+@time_function
 def find_distance_between_points(x1, y1, x2, y2):
     return np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
 
 
+@time_function
 def find_border_intersections(x1, y1, x2, y2, width, height):
     intersections = []
     if x1 != x2:  # horizontal line check
@@ -71,7 +99,10 @@ def find_border_intersections(x1, y1, x2, y2, width, height):
     return intersections
 
 
+@time_function
 def add_frame_edges(my_voronoi):
+    print("\n\n", "_"*50)
+    print("add_frame_edges()")
     bottom_left = my_voronoi.add_vertex(0, 0)
     bottom_right = my_voronoi.add_vertex(1, 0)
     top_right = my_voronoi.add_vertex(1, 1)
@@ -190,6 +221,7 @@ def add_frame_edges(my_voronoi):
 
 
 
+@time_function
 def correct_finite_ridges(my_voronoi):
     print("\n\ncorrect_finite_ridges()")
     for i, ridge in enumerate(my_voronoi.ridges):
@@ -290,6 +322,7 @@ def correct_finite_ridges(my_voronoi):
         #print("\t\tRidge Points:", ridge_pts)
 
 
+@time_function
 def correct_infinite_vertices(my_voronoi):
     print("\n\ncorrect_infinite_vertices()")
     my_voronoi.print_ridges()
@@ -415,14 +448,14 @@ def correct_infinite_vertices(my_voronoi):
                             print(f"\t[RECALC] Angle {idx} (between vertices {v1} and {v2}): {a:.6f} rad, {ad:.2f} deg")
                         print(f"\t[RECALC] Angle Sum: {anglesum:.6f} rad, {anglesum_deg:.2f} deg")
                         if abs(anglesum - 2 * np.pi) > tolerance:
-                            print("\t[WARNING] Even after switching intersection, angles do not sum to 360 degrees!")
+                            print("\t[WARNING] Even after switching intersection, angles do not sum to 360 degrees! -- TRYING AGAIN")
                             points = np.random.uniform(0.01, [my_voronoi.width-(my_voronoi.width*0.10), my_voronoi.height-(my_voronoi.height*0.10)], (len(my_voronoi.points), 2))
-                            return generate_voronoi_data_clean(points, my_voronoi.width, my_voronoi.height)
+                            return -1
             
             print("NEW RIDGE VERTEX #", new_vertex_id, ":", np.asarray(intersections[intersect_point]))  
             print("NEW RIDGE Between Ridge Vertices", index, "and", new_vertex_id)  
             
-    return my_voronoi
+    return 1
 
      
 
@@ -430,50 +463,65 @@ def correct_infinite_vertices(my_voronoi):
 
 
 
-def generate_voronoi_data_clean(points, width=1, height=1):
-    print("\n\n", ("_"*50))
+@time_function
+def generate_voronoi_data_clean(input_points, width=1, height=1):
+    print("\n\n\n\n\n", ("_"*50))
     print("generate_voronoi_data()")
     """Generate Voronoi diagram and return it as a base64 encoded image."""
     # Create random points
-    points_data = points #np.random.uniform(0.01, [width-(width*0.10), height-(height*0.10)], (points, 2))
+
+
+
+    successful_generation = 0
+    count = 0
+    while successful_generation != 1:
+        print("\n\nGeneration Attempt #", count)
+        points_data = np.random.uniform(0.01, [0.99, 0.99], (input_points, 2))
+        # Create Voronoi diagram
+        vor = Voronoi(points_data)
+        my_voronoi = mv.MyVoronoi(width, height, vor.points, vor.vertices, vor.ridge_vertices, vor.ridge_points)
+        correct_finite_ridges(my_voronoi)
+        successful_generation = correct_infinite_vertices(my_voronoi)
+        count += 1
+        if count > 10:
+            print("WORST CASE SCENARIO, COULD NOT GENERATE")
+            return None
     
-    # Create Voronoi diagram
-    vor = Voronoi(points_data)
-    
-    my_voronoi = mv.MyVoronoi(width, height, vor.points, vor.vertices, vor.ridge_vertices, vor.ridge_points)
+
+    # TODO:  add handling in initinet vertices for when # is under certain threshold
+    # TOOD:  add a retry with the add_frame_edges similar to above
 
 
-
-    correct_finite_ridges(my_voronoi)
-
-    correct_infinite_vertices(my_voronoi)
-
-    edges = add_frame_edges(my_voronoi)
-
+    try:
+        edges = add_frame_edges(my_voronoi)
+    except Exception as e:
+        print("Error adding frame edges:", e)
+        edges = -1
 
     my_voronoi.print_voronoi()
 
-    points_arr = list()
-    vertices_arr = list()
-    ridges_arr = list()
+    # points_arr = list()
+    # vertices_arr = list()
+    # ridges_arr = list()
 
-    for i in range(len(my_voronoi.points)):
-        points_arr.append(my_voronoi.get_point_xy(i))
+    # for i in range(len(my_voronoi.points)):
+    #     points_arr.append(my_voronoi.get_point_xy(i))
 
-    for i in range(len(my_voronoi.vertices)):
-        vertices_arr.append(my_voronoi.get_vertex_xy(i))
+    # for i in range(len(my_voronoi.vertices)):
+    #     vertices_arr.append(my_voronoi.get_vertex_xy(i))
 
-    for i in range(len(my_voronoi.ridges)):
-        ridges_arr.append(my_voronoi.get_ridge_vertices(i))
+    # for i in range(len(my_voronoi.ridges)):
+    #     ridges_arr.append(my_voronoi.get_ridge_vertices(i))
 
     diagram_data_json = generate_voronoi_plot_clean(my_voronoi)
 
-    return points_arr, vertices_arr, ridges_arr, diagram_data_json
+    return diagram_data_json
 
 
 
 
 
+@time_function
 def generate_voronoi_plot_clean(my_voronoi):
     """
     Generate a Voronoi diagram plot from the given Voronoi data and return it as a base64 encoded image.
@@ -484,6 +532,9 @@ def generate_voronoi_plot_clean(my_voronoi):
     Returns:
     - A string representing the base64 encoded PNG image of the Voronoi diagram.
     """
+
+    print("\n\n", "_"*50)
+    print("generate_voronoi_plot_clean()")
     # Create figure and axis
     fig, ax = plt.subplots(figsize=(8, 8))
     
@@ -501,7 +552,7 @@ def generate_voronoi_plot_clean(my_voronoi):
         vert = my_voronoi.get_vertex_xy(i)
         x, y = vert[0] * my_voronoi.width, vert[1] * my_voronoi.height
         color = colors[i % len(colors)]
-        print(f"\t{i} : {x, y} (color: {color})")
+        print(f"\t{i} : {int(x), int(y)} (color: {color})")
         ax.plot(x, y, color + 'o')
         ax.text(x, y, str(i), color=color, fontsize=10, fontweight='bold', ha='right', va='bottom')
 
@@ -526,13 +577,21 @@ def generate_voronoi_plot_clean(my_voronoi):
 
     print("REGIONS:")
     for j, region in enumerate(my_voronoi.regions):
-        print("\tRegion", j, ":", region)
+        print("\tRegion", region.id, ":")
+        print("\t\tVertices:", region.vertices)
+        print("\t\tRidge Adjacency:") #, region.ridge_adjacency)
+        for ridge in region.ridge_adjacency:
+            add_me = ""
+            if ridge in region.deleted_vertices:
+                add_me = " -- DELETED"
+            print("\t\t\t", ridge, " : ", region.ridge_adjacency[ridge], add_me)
+        print("\t\tDeleted Vertices:", region.deleted_vertices)
         try:
             ordered_region = my_voronoi.get_ordered_region(region)
+            print("\t\tOrdered Region:", ordered_region)
         except:
             print("THROW FAIL")
             continue    
-        #ordered_region = sort_polygon_data(region, vertices)
         if len(ordered_region) > 0:  # Avoid empty regions
         #    # Scale vertices by width and height
             polygon = [(my_voronoi.get_vertex_xy(i)[0] * my_voronoi.width, my_voronoi.get_vertex_xy(i)[1] * my_voronoi.height) for i in ordered_region]
