@@ -31,6 +31,7 @@ class Region:
     vertices: Set[int]
     ridge_adjacency: Dict[int, Set[int]]
     deleted_vertices: Set[int]
+    ordered_vertices: List[int]
 
 
 class MyVoronoi:
@@ -72,7 +73,7 @@ class MyVoronoi:
         return point.index
 
     def add_region(self, id: int) -> int:
-        region = Region(id=id, vertices=set(), ridge_adjacency=defaultdict(set), deleted_vertices=set())
+        region = Region(id=id, vertices=set(), ridge_adjacency=defaultdict(set), deleted_vertices=set(), ordered_vertices=list())
         self.regions.append(region)
         return region.id
 
@@ -97,7 +98,7 @@ class MyVoronoi:
             vertices = vertex_indices,
             points = point_indices
         )
-        print("ADDED RIDGE with vertices:", vertex_indices, "and poitns:", point_indices)
+        print("add_ridge -- ADDED RIDGE with vertices:", vertex_indices, "and points:", point_indices)
 
         if vertex_indices[0] != -1 and vertex_indices[1] != -1:
             self.upload_ridge_to_region(vertex_indices, point_indices)
@@ -107,23 +108,37 @@ class MyVoronoi:
         return len(self.ridges) - 1
 
 
-    def get_ordered_region(self, region: Region) -> List[int]:
+
+    def sort_region_vertices(self) -> int:
+        for region in self.regions:
+            ret_val = self.order_region_vertices(region)
+            if ret_val != 1:
+                return -1
+        return 1
+
+
+    def order_region_vertices(self, region: Region) -> int:
         ordered_region = list()
         visited = set()
         curr_node = region.vertices.pop()
         region.vertices.add(curr_node)
         region_size = len(region.vertices) - len(region.deleted_vertices)
+        
         while len(ordered_region) < region_size:
             x, y = self.get_vertex_xy(curr_node)
-            #print("IS OUT OF BOUNDS:", self.is_out_of_bounds_xy(x, y))
+
+            # if the current vertex is deleted or OOB, move to back of set
             if curr_node in region.deleted_vertices or self.is_out_of_bounds_xy(x, y):
                 curr_node = region.vertices.pop()
                 region.vertices.add(curr_node)  
                 continue
             
             #print("Checking:", curr_node, "Visited:", visited, "Curr_Size:", len(ordered_region), "Neighbours:", region.ridge_adjacency[curr_node])
+            # add node to ordered region and mark as visited
             ordered_region.append(curr_node)
             visited.add(curr_node)
+
+            # look at its neighbors and move to the next one that hasn't been visited
             for neighbor in region.ridge_adjacency[curr_node]:
                 if neighbor not in visited:
                     curr_node = neighbor
@@ -132,8 +147,14 @@ class MyVoronoi:
             if len(region.ridge_adjacency[curr_node]) > 2:
                 print("ERROR - Region", region.id, "has more than 2 adjacents at vertex", curr_node)
                 exit(1)
+            #elif len(region.ridge_adjacency[curr_node]) == 1:
+                #print("ERROR - Region", region.id, "has only 1 adjacent at vertex", curr_node)
+                #exit(1)
 
-        return ordered_region
+        region.ordered_vertices = ordered_region
+        return 1
+
+
 
 
     def upload_ridge_to_region(self, vertex_indices: Tuple[int, int], point_indices: Tuple[int, int]):
@@ -203,6 +224,17 @@ class MyVoronoi:
     def set_ridge_vertices(self, index: int, vertices: Tuple[int, int]):
         """Set the vertices for a given ridge."""
         self.ridges[index].vertices = vertices
+
+    def is_valid_ridge(self, ridge: Ridge) -> bool:
+        x1, y1 = self.get_vertex_xy(ridge.vertices[0])
+        x2, y2 = self.get_vertex_xy(ridge.vertices[1])
+        if x1 >= self.width and x2 >= self.width or \
+            y1 >= self.height and y2 >= self.height or \
+            x1 <= 0 and x2 <= 0 or \
+            y1 <= 0 and y2 <= 0:
+            return False
+        return True
+
 
     def remove_vertex_from_ridge_adj_dict(self, index: int, vertex: int):
         """Remove the adjacent vertex for a given ridge."""

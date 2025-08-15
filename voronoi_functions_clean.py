@@ -70,7 +70,7 @@ def calculate_angles(V1, V2, V3):
     
     return angle_P1_P2, angle_P2_P3, angle_P1_P3
 
-@time_function
+
 def find_distance_between_points(x1, y1, x2, y2):
     return np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
 
@@ -80,23 +80,39 @@ def find_border_intersections(x1, y1, x2, y2, width, height):
     intersections = []
     if x1 != x2:  # horizontal line check
         y_left = y1 + (0 - x1) * (y2 - y1) / (x2 - x1)
-        if 0 <= y_left <= height:
+        if 0 <= y_left <= height: # if it intersects left border
             intersections.append((0, y_left))
-            #print("\tLEFT SIDE INTERSECTION")
         y_right = y1 + (width - x1) * (y2 - y1) / (x2 - x1)
-        if 0 <= y_right <= height:
+        if 0 <= y_right <= height: # if it intersects right border
             intersections.append((width, y_right))
-            #print("\tRIGHT SIDE INTERSECTION")
     if y1 != y2:  # vertical line check
         x_bottom = x1 + (0 - y1) * (x2 - x1) / (y2 - y1)
-        if 0 <= x_bottom <= width:
+        if 0 <= x_bottom <= width:  # if it intersects bottom border
             intersections.append((x_bottom, 0))
-            #print("\tBOTTOM SIDE INTERSECTION")
         x_top = x1 + (height - y1) * (x2 - x1) / (y2 - y1)
-        if 0 <= x_top <= width:
+        if 0 <= x_top <= width:  # if it intersects top border
             intersections.append((x_top, height))
-            #print("\tTOP SIDE INTERSECTION")
     return intersections
+
+
+def find_ridge_intersections(x1, y1, x2, y2, r_x1, r_y1, r_x2, r_y2):
+    """
+    Returns the intersection point of two line segments p1-p2 and p3-p4,
+    or None if they don't intersect.
+    """
+    # Calculate denominator
+    denom = (x1 - x2) * (r_y1 - r_y2) - (y1 - y2) * (r_x1 - r_x2)
+    if denom == 0:
+        return None  # Lines are parallel or coincident
+
+    # Compute intersection point (for infinite lines)
+    px = ((x1*y2 - y1*x2) * (r_x1 - r_x2) -
+          (x1 - x2) * (r_x1*r_y2 - r_y1*r_x2)) / denom
+    py = ((x1*y2 - y1*x2) * (r_y1 - r_y2) -
+          (y1 - y2) * (r_x1*r_y2 - r_y1*r_x2)) / denom
+
+    return px, py
+
 
 
 @time_function
@@ -146,18 +162,25 @@ def add_frame_edges(my_voronoi):
     for edge in edges:
         print("\t", edge)
 
+    c2c_count = 0  # monitor how many edges are from corner to corner
     for edge in edges:
+        if len(edge) == 2:  # if the edge is from corner to corner
+            c2c_count += 1
+            
+
         for i in range(len(edge)-1):
             print("Adding Ridge from ", edge[i], "to ", edge[i+1])
             if edge[i] not in corners and edge[i+1] not in corners:
-                common_region = my_voronoi.get_vertex_adjacent_points(edge[i]).intersection(my_voronoi.get_vertex_adjacent_points(edge[i+1]))
+                region1_vertices = my_voronoi.get_vertex_adjacent_points(edge[i])
+                region2_vertices = my_voronoi.get_vertex_adjacent_points(edge[i+1])
+                common_region = region1_vertices.intersection(region2_vertices)
                 print(list(common_region))
                 print("\tRidge Points: ", my_voronoi.get_vertex_adjacent_points(edge[i]))
                 print("\tRidge Points: ", my_voronoi.get_vertex_adjacent_points(edge[i+1]))
                 print("\tCombo:", common_region)
                 my_voronoi.add_ridge([edge[i], edge[i+1]], list(common_region))
             else:  # if one of the edge vertices is a corner 
-                if edge[i] in corners and edge[i+1] in corners:
+                if edge[i] in corners and edge[i+1] in corners:  # if both are corners, don't add
                     print("WEIRD EDGE CASExx, ", edge[i], edge[i+1])
                     continue
                 elif edge[i] in corners:
@@ -169,13 +192,25 @@ def add_frame_edges(my_voronoi):
                 not_corner_points = my_voronoi.get_vertex_adjacent_points(not_corner)
                 corner_neighbors[corner].append(not_corner_points)
                 #my_voronoi.add_ridge([my_voronoi.get_vertex_xy(edge[i]), my_voronoi.get_vertex_xy(edge[i+1])])
+    if c2c_count > 2:
+        print("ERROR -- Bad generation, c2c_count > 2")
+        return -1
     print("CORNERS:", corner_neighbors)
+    print("C2C COUNT:", c2c_count)
+    if c2c_count == 1:
+        for edge in edges:
+            if len(edge) == 2:
+                corner_neighbors[edge[0]].append(corner_neighbors[edge[1]][0])
+                corner_neighbors[edge[1]].append(corner_neighbors[edge[0]][0])
+    # if c2c_count == 2:
+    print("CORNERS:", corner_neighbors)
+
     for corner in corner_neighbors:
         # if the corner adjacents are connected determine, which point to add based on distance from corner to points
         #TODO:  Determine why sometimes there is only one set of corner_neighbor points
         if len(corner_neighbors[corner]) > 1:
             x = list(corner_neighbors[corner][0].intersection(corner_neighbors[corner][1])) # get the intersection
-            print("X:", x)
+            print("\tCorner", corner, "assigned Vertex:", x)
             if corner_neighbors[corner][0] == corner_neighbors[corner][1]: 
                 x1, y1 = my_voronoi.get_vertex_xy(corner)
                 x2, y2 = my_voronoi.get_point_xy(x[0])
@@ -224,6 +259,8 @@ def add_frame_edges(my_voronoi):
 @time_function
 def correct_finite_ridges(my_voronoi):
     print("\n\ncorrect_finite_ridges()")
+
+    check_again = []
     for i, ridge in enumerate(my_voronoi.ridges):
         ridge_pts = ridge.points
         ridge_vts = np.asarray(ridge.vertices)
@@ -253,6 +290,7 @@ def correct_finite_ridges(my_voronoi):
                 (x1 < 0 and x2 < 0) or (y1 < 0 and y2 < 0):
                     print("\t\tSKIPING REASON: Both X or Y below min border")
                     print("\tSKIPPING THIS ONE")
+                    check_again.append((intersections, ridge_pts))
                     continue
                     
                 # Add both intersections to the list of vertices and ridge lists
@@ -321,13 +359,22 @@ def correct_finite_ridges(my_voronoi):
             #     ridge_dict[ridge_vts[1]].append(ridge_vts[0])
         #print("\t\tRidge Points:", ridge_pts)
 
+    # for intersection, ridge_pts in check_again:
+    #     for ridge in my_voronoi.ridges:
+    #         success = check_for_ridge_intersections(intersection, ridge_pts)
+    #         if success == -1:
+    #             return -1
+    return check_again
+
 
 @time_function
 def correct_infinite_vertices(my_voronoi):
+    print("-" * 50)
     print("\n\ncorrect_infinite_vertices()")
     my_voronoi.print_ridges()
      # Plot infinite ridges with clipping
     center = my_voronoi.get_points_all_np().mean(axis=0)
+    check_again = list()
     for ridge in my_voronoi.ridges:
         ridge_pts = np.asarray(ridge.points)
         ridge_vts = np.asarray(ridge.vertices)
@@ -347,23 +394,29 @@ def correct_infinite_vertices(my_voronoi):
             x1, y1 = my_voronoi.get_vertex_xy(index)
             x2, y2 = far_point
     
-            if not (0 < x1 < my_voronoi.width and 0 < y1 < my_voronoi.height):
-                print("\t\tValid Index is completely off frame -> SKIPPING", x1, my_voronoi.width, y1, my_voronoi.height)
-                continue 
+            # when the valid vertex is completely off screen
+
 
             # Find intersection with boundaries
             intersections = find_border_intersections(x1, y1, x2, y2, my_voronoi.width, my_voronoi.height)
             intersections.sort(key=lambda p: (p[0] - x1)**2 + (p[1] - y1)**2)
+            
+            check_intersections = False
+            if not (0 < x1 < my_voronoi.width and 0 < y1 < my_voronoi.height): 
+                print("\t\tValid Index is completely off frame -> SKIPPING", x1, my_voronoi.width, y1, my_voronoi.height)
+                if len(my_voronoi.vertices) < 5:
+                    check_intersections = True
+                    check_again.append((intersections, ridge_pts))
+                    continue
+                else:
+                    continue 
 
             print("\tIntersections:", np.asarray(intersections))
             intersect_point = 0
             
-            #my_voronoi.add_ridge((index, len(my_voronoi.vertices)), ridge_pts)
             new_vertex_id = my_voronoi.add_vertex(intersections[0][0], intersections[0][1], ridge_pts)
-            #print("Setting Rdige:", index)
-            #my_voronoi.set_ridge_vertices(i, [ridge_vts[safe_vertex_id], vertex_id])
             my_voronoi.add_ridge((index, new_vertex_id), ridge_pts)
-            print("UDPATED DICT for", index, ":", my_voronoi.ridge_dict[index])
+            print("UPDATED DICT for", index, ":", my_voronoi.ridge_dict[index])
 
 
             # TODO THIS IS A BUG, it doesn't project a line at all
@@ -450,13 +503,47 @@ def correct_infinite_vertices(my_voronoi):
                         if abs(anglesum - 2 * np.pi) > tolerance:
                             print("\t[WARNING] Even after switching intersection, angles do not sum to 360 degrees! -- TRYING AGAIN")
                             points = np.random.uniform(0.01, [my_voronoi.width-(my_voronoi.width*0.10), my_voronoi.height-(my_voronoi.height*0.10)], (len(my_voronoi.points), 2))
-                            return -1
+                            return -1, []
             
             print("NEW RIDGE VERTEX #", new_vertex_id, ":", np.asarray(intersections[intersect_point]))  
             print("NEW RIDGE Between Ridge Vertices", index, "and", new_vertex_id)  
-            
-    return 1
+    
+    my_voronoi.print_ridges()
 
+    return 1, check_again
+
+
+def check_for_ridge_intersections(my_voronoi: mv.MyVoronoi, intersect: tuple, ridge_pts: list):
+    x1, y1 = intersect[0]
+    x2, y2 = intersect[1]
+    print("Checking Intersection from: ", x1, y1, "to", x2, y2, "for ridge points", ridge_pts)
+    bad_intersect = False
+    for ridge in my_voronoi.ridges:
+        print("\tChecking for intersections with ridge vertices", ridge.vertices[0], ridge.vertices[1])
+        if not my_voronoi.is_valid_ridge(ridge):
+            print("\tInvalid Ridge => Skipping")
+            continue
+        r_x1, r_y1 = my_voronoi.get_vertex_xy(ridge.vertices[0])
+        r_x2, r_y2 = my_voronoi.get_vertex_xy(ridge.vertices[1])
+        p1, p2 = find_ridge_intersections(x1, y1, x2, y2, r_x1, r_y1, r_x2, r_y2)
+        print("\t\tINTERSECTION POINTS:", p1, p2)
+        if p1 is None and p2 is None:
+            print("\t\tERROR FAILED TO FIND INTERSECTION")
+            break
+        if 0 <= p1 <= my_voronoi.width and 0 <= p2 <= my_voronoi.height:
+            print("\t\tINTERSECTION ON SCREEN")
+            bad_intersect = True
+            break
+    if not bad_intersect:
+        print("FUCK IT DID IT. WORK")
+        vertex1 = my_voronoi.add_vertex(intersect[0][0], intersect[0][1], ridge_pts)
+        vertex2 = my_voronoi.add_vertex(intersect[1][0], intersect[1][1], ridge_pts)
+        my_voronoi.add_ridge((vertex1, vertex2), ridge_pts)
+        my_voronoi.ridge_dict[vertex1].append(vertex2)
+        my_voronoi.ridge_dict[vertex2].append(vertex1)
+        return 1
+    else:
+        return -1
      
 
 
@@ -480,25 +567,40 @@ def generate_voronoi_data_clean(input_points, width=1, height=1):
         # Create Voronoi diagram
         vor = Voronoi(points_data)
         my_voronoi = mv.MyVoronoi(width, height, vor.points, vor.vertices, vor.ridge_vertices, vor.ridge_points)
-        correct_finite_ridges(my_voronoi)
-        successful_generation = correct_infinite_vertices(my_voronoi)
+        check_again1 = correct_finite_ridges(my_voronoi)
+        print("Check Again 1 Length:", len(check_again1))
+        successful_generation, check_again2 = correct_infinite_vertices(my_voronoi)
+        check_again = check_again1 + check_again2
+        print("Check Again 2 Length:", len(check_again2))
+        if check_again:
+            print("OFFSCREEN INTERSECTS:")
+            for intersect, ridge_pts in check_again:
+                success = check_for_ridge_intersections(my_voronoi, intersect, ridge_pts)
+                if success == -1:
+                    successful_generation = -1 
         count += 1
         if count > 10:
             print("WORST CASE SCENARIO, COULD NOT GENERATE")
             return None
-    
+
+        if successful_generation != 1:
+            continue
+        successful_generation = add_frame_edges(my_voronoi)
+        count += 1
+        if count > 10:
+            print("WORST CASE SCENARIO, COULD NOT GENERATE")
+            return None
 
     # TODO:  add handling in initinet vertices for when # is under certain threshold
     # TOOD:  add a retry with the add_frame_edges similar to above
 
 
-    try:
-        edges = add_frame_edges(my_voronoi)
-    except Exception as e:
-        print("Error adding frame edges:", e)
-        edges = -1
+
+
 
     my_voronoi.print_voronoi()
+    my_voronoi.sort_region_vertices()
+    my_voronoi.print_regions()
 
     # points_arr = list()
     # vertices_arr = list()
@@ -552,7 +654,7 @@ def generate_voronoi_plot_clean(my_voronoi):
         vert = my_voronoi.get_vertex_xy(i)
         x, y = vert[0] * my_voronoi.width, vert[1] * my_voronoi.height
         color = colors[i % len(colors)]
-        print(f"\t{i} : {int(x), int(y)} (color: {color})")
+        print(f"\t{i} : {float(x), float(y)} (color: {color})")
         ax.plot(x, y, color + 'o')
         ax.text(x, y, str(i), color=color, fontsize=10, fontweight='bold', ha='right', va='bottom')
 
@@ -563,15 +665,12 @@ def generate_voronoi_plot_clean(my_voronoi):
     for i in range(len(my_voronoi.ridges)):
         ridge_vts = my_voronoi.get_ridge_vertices(i)
         if np.all(np.asarray(ridge_vts) >= 0):
-            x1, y1 = my_voronoi.get_vertex_xy(ridge_vts[0])
-            x2, y2 = my_voronoi.get_vertex_xy(ridge_vts[1])
-            if x1 >= my_voronoi.width and x2 >= my_voronoi.width or \
-                y1 >= my_voronoi.height and y2 >= my_voronoi.height or \
-                x1 <= 0 and x2 <= 0 or \
-                y1 <= 0 and y2 <= 0:
+            if not my_voronoi.is_valid_ridge(my_voronoi.ridges[i]):
                 print("\tPSYCH! I AINT PLOTTING - ", ridge_vts)
                 continue
             else:
+                x1, y1 = my_voronoi.get_vertex_xy(ridge_vts[0])
+                x2, y2 = my_voronoi.get_vertex_xy(ridge_vts[1])
                 ax.plot([x1, x2], [y1, y2], 'k-')
 
 
@@ -586,15 +685,14 @@ def generate_voronoi_plot_clean(my_voronoi):
                 add_me = " -- DELETED"
             print("\t\t\t", ridge, " : ", region.ridge_adjacency[ridge], add_me)
         print("\t\tDeleted Vertices:", region.deleted_vertices)
-        try:
-            ordered_region = my_voronoi.get_ordered_region(region)
-            print("\t\tOrdered Region:", ordered_region)
-        except:
-            print("THROW FAIL")
-            continue    
-        if len(ordered_region) > 0:  # Avoid empty regions
+        # try:
+        #     my_voronoi.order_region_vertices()
+        # except:
+        #     print("THROW FAIL")
+        #     continue    
+        if len(region.ordered_vertices) > 0:  # Avoid empty regions
         #    # Scale vertices by width and height
-            polygon = [(my_voronoi.get_vertex_xy(i)[0] * my_voronoi.width, my_voronoi.get_vertex_xy(i)[1] * my_voronoi.height) for i in ordered_region]
+            polygon = [(my_voronoi.get_vertex_xy(i)[0] * my_voronoi.width, my_voronoi.get_vertex_xy(i)[1] * my_voronoi.height) for i in region.ordered_vertices]
             #print("\t\t", polygon)
             # Generate a random color for each region
             color = np.random.rand(3,)  # Random RGB color
