@@ -44,7 +44,7 @@ HTML_TEMPLATE = '''
         <div class="form-container">
             <form id="voronoiForm">
                 <label for="points">Number of Points:</label>
-                <input type="number" id="points" name="points" min="2" max="100" value="10">
+                <input type="number" id="points" name="points" min="4" max="100" value="10">
                 <button type="submit">Generate Diagram</button>
             </form>
         </div>

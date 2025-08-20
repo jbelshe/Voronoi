@@ -11,6 +11,7 @@ import MyVoronoi as mv
 import matplotlib.pyplot as plt
 from io import BytesIO
 import time
+import beepy
 from functools import wraps
 
 # Enable/disable timing (set to False to disable timing output)
@@ -74,6 +75,56 @@ def calculate_angles(V1, V2, V3):
 def find_distance_between_points(x1, y1, x2, y2):
     return np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
 
+def find_closer_point_to_line(point1: tuple[float, float], point2: tuple[float, float], ridge_vtx: tuple[tuple[float, float], tuple[float, float]]):
+
+    d1 = find_distance_between_point_and_line(point1, ridge_vtx)
+    d2 = find_distance_between_point_and_line(point2, ridge_vtx)
+    if d1 < d2:
+        return point1
+    else:
+        return point2
+
+
+def find_distance_between_point_and_line(point: tuple[float, float], ridge_vtx: tuple[tuple[float, float], tuple[float, float]]):
+    p_x, p_y = point
+    v1_x, v1_y = ridge_vtx[0]
+    v2_x, v2_y = ridge_vtx[1]
+    
+    intersection = perpendicular_line((p_x, p_y), ((v1_x, v1_y), (v2_x, v2_y)))
+    return find_distance_between_points(p_x, p_y, intersection[0], intersection[1])
+    
+
+def perpendicular_line(point: tuple[float, float], line: tuple[tuple[float, float], tuple[float, float]]):
+    """
+    Returns the intersection point on the line where the perpendicular
+    from `point` meets the line.
+    
+    :param point: tuple (x0, y0)
+    :param line: tuple of two points ((x1, y1), (x2, y2))
+    :return: intersection point (x, y)
+    """
+    x0, y0 = point
+    (x1, y1), (x2, y2) = line
+
+    # Vertical line case
+    if x1 == x2:
+        return (x1, y0)
+
+    # Horizontal line case
+    if y1 == y2:
+        return (x0, y1)
+
+    # General case
+    m = (y2 - y1) / (x2 - x1)           # slope of the line
+    m_perp = -1 / m                      # slope of perpendicular
+
+    # Solve for intersection: y - y1 = m(x - x1) and y - y0 = m_perp(x - x0)
+    x_intersect = (m*x1 - m_perp*x0 + y0 - y1) / (m - m_perp)
+    y_intersect = m * (x_intersect - x1) + y1
+
+    return (x_intersect, y_intersect)
+
+
 
 @time_function
 def find_border_intersections(x1, y1, x2, y2, width, height):
@@ -123,13 +174,14 @@ def add_frame_edges(my_voronoi):
     bottom_right = my_voronoi.add_vertex(1, 0)
     top_right = my_voronoi.add_vertex(1, 1)
     top_left = my_voronoi.add_vertex(0, 1)
+
+
     corners = {bottom_left, bottom_right, top_right, top_left}
     corner_regions = {
         bottom_left: None,
         bottom_right: None,
         top_right: None,
         top_left: None
-
     }
 
     corner_neighbors = {
@@ -202,16 +254,40 @@ def add_frame_edges(my_voronoi):
             if len(edge) == 2:
                 corner_neighbors[edge[0]].append(corner_neighbors[edge[1]][0])
                 corner_neighbors[edge[1]].append(corner_neighbors[edge[0]][0])
-    # if c2c_count == 2:
+    if c2c_count == 2:
+        min_x_pt, min_y_pt, max_x_pt, max_y_pt = my_voronoi.get_min_max_points()
+        print("DID THIS SHIT FUCKING WORK?") 
+        for edge in edges:
+            if len(edge) == 2:  # find the closest vertex to the edge
+                x1, y1 = my_voronoi.get_vertex_xy(edge[0])
+                x2, y2 = my_voronoi.get_vertex_xy(edge[1])
+                if x1 == x2:  # if the edge is vertical 
+                    if x1 == 0:  # if the edge is on the left border
+                        corner_neighbors[edge[0]].append({min_x_pt})
+                        corner_neighbors[edge[1]].append({min_x_pt})
+                    else:  # if the edge is on the right border
+                        corner_neighbors[edge[0]].append({max_x_pt})
+                        corner_neighbors[edge[1]].append({max_x_pt})
+                elif y1 == y2:  # if the edge is horizontal
+                    if y1 == 0:  # if the edge is on the bottom border
+                        corner_neighbors[edge[0]].append({min_y_pt})
+                        corner_neighbors[edge[1]].append({min_y_pt})
+                    else:  # if the edge is on the top border
+                        corner_neighbors[edge[0]].append({max_y_pt})
+                        corner_neighbors[edge[1]].append({max_y_pt})
+            
+                
+
+                
     print("CORNERS:", corner_neighbors)
 
+    # TODO:  see if this can be simplfied
     for corner in corner_neighbors:
         # if the corner adjacents are connected determine, which point to add based on distance from corner to points
-        #TODO:  Determine why sometimes there is only one set of corner_neighbor points
         if len(corner_neighbors[corner]) > 1:
             x = list(corner_neighbors[corner][0].intersection(corner_neighbors[corner][1])) # get the intersection
             print("\tCorner", corner, "assigned Vertex:", x)
-            if corner_neighbors[corner][0] == corner_neighbors[corner][1]: 
+            if corner_neighbors[corner][0] == corner_neighbors[corner][1] and len(x) == 2: 
                 x1, y1 = my_voronoi.get_vertex_xy(corner)
                 x2, y2 = my_voronoi.get_point_xy(x[0])
                 x3, y3 = my_voronoi.get_point_xy(x[1])
@@ -503,14 +579,20 @@ def correct_infinite_vertices(my_voronoi):
                         if abs(anglesum - 2 * np.pi) > tolerance:
                             print("\t[WARNING] Even after switching intersection, angles do not sum to 360 degrees! -- TRYING AGAIN")
                             points = np.random.uniform(0.01, [my_voronoi.width-(my_voronoi.width*0.10), my_voronoi.height-(my_voronoi.height*0.10)], (len(my_voronoi.points), 2))
-                            return -1, []
+                            return -1 #, []
             
             print("NEW RIDGE VERTEX #", new_vertex_id, ":", np.asarray(intersections[intersect_point]))  
             print("NEW RIDGE Between Ridge Vertices", index, "and", new_vertex_id)  
     
-    my_voronoi.print_ridges()
 
-    return 1, check_again
+    for intersect, ridge_pts in check_again:
+        success = check_for_ridge_intersections(my_voronoi, intersect, ridge_pts)
+        if success == -1:
+            return -1
+    if check_again:
+        print("CHECK AGAIN FIXED IT")
+
+    return 1 #, check_again
 
 
 def check_for_ridge_intersections(my_voronoi: mv.MyVoronoi, intersect: tuple, ridge_pts: list):
@@ -534,6 +616,21 @@ def check_for_ridge_intersections(my_voronoi: mv.MyVoronoi, intersect: tuple, ri
             print("\t\tINTERSECTION ON SCREEN")
             bad_intersect = True
             break
+        for point in my_voronoi.points:  # ridge point passed in doesn't matter since ridge bisects points
+            point1 = my_voronoi.get_point_xy(point.index)
+            point2 = my_voronoi.get_point_xy(ridge_pts[0])
+            ridge_vtx1 = my_voronoi.get_vertex_xy(ridge.vertices[0])
+            ridge_vtx2 = my_voronoi.get_vertex_xy(ridge.vertices[1])
+            if point1 == find_closer_point_to_line(point1, point2, (ridge_vtx1, ridge_vtx2)):
+                print("\t\t\tPOINT",  point.index, "IS CLOSER to ridge than", ridge_pts[0])
+                bad_intersect = True
+                # TODO:  don't cancel load with bad_intersect, try to just delete ridge
+                break
+        if bad_intersect: 
+            break
+
+
+                
     if not bad_intersect:
         print("FUCK IT DID IT. WORK")
         vertex1 = my_voronoi.add_vertex(intersect[0][0], intersect[0][1], ridge_pts)
@@ -567,17 +664,24 @@ def generate_voronoi_data_clean(input_points, width=1, height=1):
         # Create Voronoi diagram
         vor = Voronoi(points_data)
         my_voronoi = mv.MyVoronoi(width, height, vor.points, vor.vertices, vor.ridge_vertices, vor.ridge_points)
-        check_again1 = correct_finite_ridges(my_voronoi)
-        print("Check Again 1 Length:", len(check_again1))
-        successful_generation, check_again2 = correct_infinite_vertices(my_voronoi)
-        check_again = check_again1 + check_again2
-        print("Check Again 2 Length:", len(check_again2))
-        if check_again:
-            print("OFFSCREEN INTERSECTS:")
-            for intersect, ridge_pts in check_again:
-                success = check_for_ridge_intersections(my_voronoi, intersect, ridge_pts)
-                if success == -1:
-                    successful_generation = -1 
+        #check_again1 = 
+        correct_finite_ridges(my_voronoi)
+        #print("Check Again 1 Length:", len(check_again1))
+        print(successful_generation)
+        successful_generation = correct_infinite_vertices(my_voronoi)
+        #successful_generation, check_again2 = correct_infinite_vertices(my_voronoi)
+        #check_again = check_again1 + check_again2
+        # TODO:  Assess viability of ignoring check_again2.  Seems like it produces downstream bugs
+                # Check for condition when a region only has two points, look for a ridge that connects them
+                # A ridge that connects them should both be off screen
+                # Add that ridge and then do a check for ridge intersections
+        # print("Check Again 2 Length:", len(check_again2))
+        # if check_again:
+        #     print("OFFSCREEN INTERSECTS:")
+        #     for intersect, ridge_pts in check_again:
+        #         success = check_for_ridge_intersections(my_voronoi, intersect, ridge_pts)
+        #         if success == -1:
+        #             successful_generation = -1  
         count += 1
         if count > 10:
             print("WORST CASE SCENARIO, COULD NOT GENERATE")
@@ -694,7 +798,12 @@ def generate_voronoi_plot_clean(my_voronoi):
         #    # Scale vertices by width and height
             polygon = [(my_voronoi.get_vertex_xy(i)[0] * my_voronoi.width, my_voronoi.get_vertex_xy(i)[1] * my_voronoi.height) for i in region.ordered_vertices]
             #print("\t\t", polygon)
-            # Generate a random color for each region
+            # New color palette implementation
+            # color_palette = ["#780000", "#c1121f", "#fdf0d5", "#003049", "#669bbc"]
+            # color = color_palette[j % len(color_palette)]
+            # ax.fill(*zip(*polygon), facecolor=color, alpha=0.5)
+            
+            # Old random color implementation (kept for reference)
             color = np.random.rand(3,)  # Random RGB color
             ax.fill(*zip(*polygon), facecolor=color, alpha=0.3)
 

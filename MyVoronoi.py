@@ -123,7 +123,7 @@ class MyVoronoi:
         curr_node = region.vertices.pop()
         region.vertices.add(curr_node)
         region_size = len(region.vertices) - len(region.deleted_vertices)
-        
+
         while len(ordered_region) < region_size:
             x, y = self.get_vertex_xy(curr_node)
 
@@ -146,7 +146,8 @@ class MyVoronoi:
             
             if len(region.ridge_adjacency[curr_node]) > 2:
                 print("ERROR - Region", region.id, "has more than 2 adjacents at vertex", curr_node)
-                exit(1)
+                ordered_region = []
+                break
             #elif len(region.ridge_adjacency[curr_node]) == 1:
                 #print("ERROR - Region", region.id, "has only 1 adjacent at vertex", curr_node)
                 #exit(1)
@@ -235,6 +236,29 @@ class MyVoronoi:
             return False
         return True
 
+    def get_min_max_points(self):
+        min_x_pt = -1
+        min_y_pt = -1
+        max_x_pt = -1
+        max_y_pt = -1
+        min_x = 1
+        min_y = 1
+        max_x = 0
+        max_y = 0
+        for point in self.points:
+            if point.x < min_x:
+                min_x = point.x
+                min_x_pt = point.index
+            if point.x > max_x:
+                max_x = point.x
+                max_x_pt = point.index
+            if point.y < min_y:
+                min_y = point.y
+                min_y_pt = point.index
+            if point.y > max_y:
+                max_y = point.y
+                max_y_pt = point.index
+        return min_x_pt, min_y_pt, max_x_pt, max_y_pt
 
     def remove_vertex_from_ridge_adj_dict(self, index: int, vertex: int):
         """Remove the adjacent vertex for a given ridge."""
