@@ -11,7 +11,7 @@ import MyVoronoi as mv
 import matplotlib.pyplot as plt
 from io import BytesIO
 import time
-import beepy
+import random
 from functools import wraps
 
 # Enable/disable timing (set to False to disable timing output)
@@ -643,12 +643,22 @@ def check_for_ridge_intersections(my_voronoi: mv.MyVoronoi, intersect: tuple, ri
         return -1
      
 
-
+def attempt_recovery(my_voronoi: mv.MyVoronoi, region: mv.Region, check_again):
+    for ridge in my_voronoi.ridges:
+        if ridge.vertices[0] in region.vertices and ridge.vertices[1] in region.vertices:
+            print("We Could Have Saved Her with ridge:", ridge.vertices)
+            for x in check_again:
+                print(check_again)
+                if ridge.points[0] == x[1][0] and ridge.points[1] == x[1][1]:
+                    print("FUCK THIS THING COULD WORK")
+                    return 1
+    return -1
+    
 
 
 
 @time_function
-def generate_voronoi_data_clean(input_points, width=1, height=1):
+def generate_voronoi_data_clean(input_points, width=1, height=1, show_numbers=True, show_points=True):
     print("\n\n\n\n\n", ("_"*50))
     print("generate_voronoi_data()")
     """Generate Voronoi diagram and return it as a base64 encoded image."""
@@ -659,13 +669,17 @@ def generate_voronoi_data_clean(input_points, width=1, height=1):
     successful_generation = 0
     count = 0
     while successful_generation != 1:
+        count += 1
+        if count == 10:
+            print("WORST CASE SCENARIO, COULD NOT GENERATE")
+            return None
         print("\n\nGeneration Attempt #", count)
         points_data = np.random.uniform(0.01, [0.99, 0.99], (input_points, 2))
         # Create Voronoi diagram
         vor = Voronoi(points_data)
         my_voronoi = mv.MyVoronoi(width, height, vor.points, vor.vertices, vor.ridge_vertices, vor.ridge_points)
         #check_again1 = 
-        correct_finite_ridges(my_voronoi)
+        check_again = correct_finite_ridges(my_voronoi)
         #print("Check Again 1 Length:", len(check_again1))
         print(successful_generation)
         successful_generation = correct_infinite_vertices(my_voronoi)
@@ -682,18 +696,28 @@ def generate_voronoi_data_clean(input_points, width=1, height=1):
         #         success = check_for_ridge_intersections(my_voronoi, intersect, ridge_pts)
         #         if success == -1:
         #             successful_generation = -1  
-        count += 1
-        if count > 10:
-            print("WORST CASE SCENARIO, COULD NOT GENERATE")
-            return None
+
 
         if successful_generation != 1:
             continue
         successful_generation = add_frame_edges(my_voronoi)
-        count += 1
-        if count > 10:
-            print("WORST CASE SCENARIO, COULD NOT GENERATE")
-            return None
+
+        if successful_generation != 1:
+            continue
+
+        # performs a check on each region to ensure it has 3 vertices
+        # Handles edge case with 2 OOB vertices, but for point in corner
+        for region in my_voronoi.regions:  
+            valid = my_voronoi.validate_region(region)
+            if valid != 1:
+                successful_generation = -1
+                break
+                # TODO:  See if we can fix this edge case in future
+                #attempt_recovery(my_voronoi, region,check_again)
+        if successful_generation != 1:
+            print("2 OOB FINITE RESTART")
+            continue
+
 
     # TODO:  add handling in initinet vertices for when # is under certain threshold
     # TOOD:  add a retry with the add_frame_edges similar to above
@@ -719,7 +743,7 @@ def generate_voronoi_data_clean(input_points, width=1, height=1):
     # for i in range(len(my_voronoi.ridges)):
     #     ridges_arr.append(my_voronoi.get_ridge_vertices(i))
 
-    diagram_data_json = generate_voronoi_plot_clean(my_voronoi)
+    diagram_data_json = generate_voronoi_plot_clean(my_voronoi, show_numbers, show_points)
 
     return diagram_data_json
 
@@ -728,12 +752,14 @@ def generate_voronoi_data_clean(input_points, width=1, height=1):
 
 
 @time_function
-def generate_voronoi_plot_clean(my_voronoi):
+def generate_voronoi_plot_clean(my_voronoi, show_numbers, show_points=True):
     """
     Generate a Voronoi diagram plot from the given Voronoi data and return it as a base64 encoded image.
 
     Parameters:
     - my_voronoi: An instance of a Voronoi diagram object containing points, vertices, ridges, and regions.
+    - show_numbers: Boolean indicating whether to display point/vertex numbers
+    - show_points: Boolean indicating whether to show the points (default: False)
 
     Returns:
     - A string representing the base64 encoded PNG image of the Voronoi diagram.
@@ -744,23 +770,28 @@ def generate_voronoi_plot_clean(my_voronoi):
     # Create figure and axis
     fig, ax = plt.subplots(figsize=(8, 8))
     
-    # Plot points
-    print("DATA POINTS:")
-    for point in my_voronoi.points:
-        ax.plot(point.x * my_voronoi.width, point.y * my_voronoi.height, 'bo')
-        print("\tPoint ", point.index, ": (", point.x, point.y, ")")
-        ax.text(point.x, point.y, str(point.index), color='blue', fontsize=12, fontweight='bold', ha='right', va='bottom')
+    # Plot points if not hidden
+    if show_points:
+        print("DATA POINTS:")
+        for point in my_voronoi.points:
+            print("\tPoint ", point.index, ": (", point.x, point.y, ")")
+            if show_numbers:
+                ax.plot(point.x * my_voronoi.width, point.y * my_voronoi.height, 'bo')
+                ax.text(point.x, point.y, str(point.index), color='blue', fontsize=12, fontweight='bold', ha='right', va='bottom')
+            else:
+                ax.plot(point.x * my_voronoi.width, point.y * my_voronoi.height, 'ko')
 
-    # Plot vertices with different colors
-    colors = ['r', 'g', 'c', 'm', 'y', 'k']
-    print("Vertices (color coding):")
-    for i in range(len(my_voronoi.vertices)):
-        vert = my_voronoi.get_vertex_xy(i)
-        x, y = vert[0] * my_voronoi.width, vert[1] * my_voronoi.height
-        color = colors[i % len(colors)]
-        print(f"\t{i} : {float(x), float(y)} (color: {color})")
-        ax.plot(x, y, color + 'o')
-        ax.text(x, y, str(i), color=color, fontsize=10, fontweight='bold', ha='right', va='bottom')
+    # Plot vertices with different colors if showing numbers
+    if show_numbers:
+        colors = ['r', 'g', 'c', 'm', 'y', 'k']
+        print("Vertices (color coding):")
+        for i in range(len(my_voronoi.vertices)):
+            vert = my_voronoi.get_vertex_xy(i)
+            x, y = vert[0] * my_voronoi.width, vert[1] * my_voronoi.height
+            color = colors[i % len(colors)]
+            print(f"\t{i} : {float(x), float(y)} (color: {color})")
+            ax.plot(x, y, color + 'o')
+            ax.text(x, y, str(i), color=color, fontsize=10, fontweight='bold', ha='right', va='bottom')
 
     
     print("RIDGES:")
@@ -778,7 +809,31 @@ def generate_voronoi_plot_clean(my_voronoi):
                 ax.plot([x1, x2], [y1, y2], 'k-')
 
 
-    print("REGIONS:")
+    # New color palette implementation
+    color_palette_arr = [
+            ["#8ecae6","#219ebc","#023047","#ffb703","#fb8500"],
+            ["#780000", "#c1121f", "#fdf0d5", "#003049", "#669bbc"],
+            ["#cdb4db","#ffc8dd","#ffafcc","#bde0fe","#a2d2ff"],
+            ["#ffe5ec","#ffc2d1","#ffb3c6","#ff8fab","#fb6f92"],
+            ["#264653","#2a9d8f","#e9c46a","#f4a261","#e76f51"],
+            ["#f4f1de","#e07a5f","#3d405b","#81b29a","#f2cc8f"],
+            ["#0081a7","#00afb9","#fdfcdc","#fed9b7","#f07167"],
+            ["#ef476f","#ffd166","#06d6a0","#118ab2","#073b4c"],
+            ["#03071e","#370617","#6a040f","#9d0208","#d00000","#dc2f02","#e85d04","#f48c06","#faa307","#ffba08"],
+            ["#590d22","#800f2f","#a4133c","#c9184a","#ff4d6d","#ff758f","#ff8fa3","#ffb3c1","#ffccd5","#fff0f3"],
+            ["#f94144","#f3722c","#f8961e","#f9844a","#f9c74f","#90be6d","#43aa8b","#4d908e","#577590","#277da1"],
+            ["#f72585","#b5179e","#7209b7","#560bad","#480ca8","#3a0ca3","#3f37c9","#4361ee","#4895ef","#4cc9f0"],
+            ["#9b5de5","#f15bb5","#fee440","#00bbf9","#00f5d4"],
+            ["#001219","#005f73","#0a9396","#94d2bd","#e9d8a6","#ee9b00","#ca6702","#bb3e03","#ae2012","#9b2226"],
+            ["#390099","#9e0059","#ff0054","#ff5400","#ffbd00"],
+            ["#f72585","#b5179e","#7209b7","#560bad","#480ca8","#3a0ca3","#3f37c9","#4361ee","#4895ef","#4cc9f0"],
+            ["#ff7b00","#ff8800","#ff9500","#ffa200","#ffaa00","#ffb700","#ffc300","#ffd000","#ffdd00","#ffea00"],
+            ["#ffadad","#ffd6a5","#fdffb6","#caffbf","#9bf6ff","#a0c4ff","#bdb2ff","#ffc6ff","#fffffc"],
+    ]
+    palette_index = random.randint(0, len(color_palette_arr)-1)
+    color_palette = color_palette_arr[palette_index]
+
+    print("REGIONS (colored in palette#:", palette_index, "):")
     for j, region in enumerate(my_voronoi.regions):
         print("\tRegion", region.id, ":")
         print("\t\tVertices:", region.vertices)
@@ -798,14 +853,13 @@ def generate_voronoi_plot_clean(my_voronoi):
         #    # Scale vertices by width and height
             polygon = [(my_voronoi.get_vertex_xy(i)[0] * my_voronoi.width, my_voronoi.get_vertex_xy(i)[1] * my_voronoi.height) for i in region.ordered_vertices]
             #print("\t\t", polygon)
-            # New color palette implementation
-            # color_palette = ["#780000", "#c1121f", "#fdf0d5", "#003049", "#669bbc"]
-            # color = color_palette[j % len(color_palette)]
-            # ax.fill(*zip(*polygon), facecolor=color, alpha=0.5)
+
+            color = color_palette[j % len(color_palette)]
+            ax.fill(*zip(*polygon), facecolor=color, alpha=0.5)
             
             # Old random color implementation (kept for reference)
-            color = np.random.rand(3,)  # Random RGB color
-            ax.fill(*zip(*polygon), facecolor=color, alpha=0.3)
+            # color = np.random.rand(3,)  # Random RGB color
+            # ax.fill(*zip(*polygon), facecolor=color, alpha=0.3)
 
     # Set plot limits and aspect
     ax.set_xlim(0, my_voronoi.width)

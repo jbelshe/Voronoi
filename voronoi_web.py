@@ -30,12 +30,34 @@ HTML_TEMPLATE = '''
     <title>Voronoi Diagram Generator</title>
     <style>
         body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-        .container { display: flex; gap: 20px; }
+        .container { display: flex; gap: 10px; }
         .form-container { flex: 1; }
         .diagram-container { flex: 2; }
         .diagram { max-width: 100%; }
         input { width: 100px; }
         button { padding: 8px 16px; }
+        .form-container div {
+            margin: 10px 0;
+        }
+
+        .form-container label {
+            display: inline-block;
+            min-width: 150px; /* Reduced from 200px */
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        .form-container input[type="number"] {
+            width: 80px; /* Fixed width for number input */
+            display: inline-block;
+            vertical-align: middle;
+        }
+        
+        .form-container input[type="checkbox"] {
+            width: auto;
+            margin-left: 0;
+            vertical-align: middle;
+        }
     </style>
 </head>
 <body>
@@ -43,8 +65,18 @@ HTML_TEMPLATE = '''
     <div class="container">
         <div class="form-container">
             <form id="voronoiForm">
-                <label for="points">Number of Points:</label>
-                <input type="number" id="points" name="points" min="4" max="100" value="10">
+                <div>
+                    <label for="points">Number of Points:</label>
+                    <input type="number" id="points" name="points" min="4" max="100" value="10">
+                </div>
+                <div>
+                    <label for="showNumbers">Display Vertex/Points Labels:</label>
+                    <input type="checkbox" id="showNumbers" name="showNumbers" checked>
+                </div>
+                <div>
+                    <label for="showPoints">Show Points:</label>
+                    <input type="checkbox" id="showPoints" name="showPoints" checked>
+                </div>
                 <button type="submit">Generate Diagram</button>
             </form>
         </div>
@@ -56,7 +88,9 @@ HTML_TEMPLATE = '''
         document.getElementById('voronoiForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const points = document.getElementById('points').value;
-            const response = await fetch(`/generate?points=${points}`);
+            const showNumbers = document.getElementById('showNumbers').checked;
+            const showPoints = document.getElementById('showPoints').checked;
+            const response = await fetch(`/generate?points=${points}&show_numbers=${showNumbers}&show_points=${showPoints}`);
             const data = await response.json();
             document.getElementById('diagram').src = data.diagram;
         });
@@ -70,11 +104,6 @@ HTML_TEMPLATE = '''
 @app.route('/')
 def index():
     # Generate initial diagram with 10 points
-    #diagram_data = generate_voronoi_diagram(10)
-    #points_data = np.random.uniform(0.01, [0.99, 0.99], (10, 2))
-    
-    #(points, vertices, ridges, regions) = generate_voronoi_data(points_data)
-    #diagram_data = generate_voronoi_plot(points, vertices, ridges, regions, 1000, 1000)
     diagram_data = generate_voronoi_data_clean(10)
     
     return render_template_string(HTML_TEMPLATE, diagram_data=diagram_data)
@@ -82,31 +111,25 @@ def index():
 @app.route('/generate')
 def generate():
     input_points = int(request.args.get('points', 10))
-    #diagram_data = generate_voronoi_diagram(points)
+    show_numbers = request.args.get('show_numbers', 'true').lower() == 'true'
+    show_points = request.args.get('show_points', 'true').lower() == 'true'
+    
+    # # Generate the diagram with number display option
+    # count = 0
+    # while True:
+    #     try:
+    #         # your main code here
+    #         diagram_data_clean = generate_voronoi_data_clean(input_points, show_numbers=show_numbers)
+    #         print("RUNNING", count)
+    #         count += 1
+    #         #break
+    #     except Exception as e:
+    #         print(f"Error occurred: {e}")
+    #         break
 
-    diagram_data_clean = generate_voronoi_data_clean(input_points)
+    diagram_data_clean = generate_voronoi_data_clean(input_points, show_numbers=show_numbers, show_points=show_points)
 
-    # print("Points Length:", len(points), "Points_arr Length:", len(points_arr))
-    # for i, p in enumerate(points):
-    #     print("\t", "Point", i, ":", p)
-    # for i, p in enumerate(points_arr):
-    #     print("\t", "Point", i, ":", p)
-    # print("Vertices Length:", len(vertices), "Vertices_arr Length:", len(vertices_arr))
-    # for i, v in enumerate(vertices):
-    #     print("\t", "Vertex", i, ":", v)
-    # for i, v in enumerate(vertices_arr):
-    #     print("\t", "Vertex", i, ":", v)
-    # print("Ridges Length:", len(ridges), "Ridges_arr Length:", len(ridges_arr))
-    # for i, r in enumerate(ridges):
-    #     print("\t", "Ridge", i, ":", r)
-    # for i, r in enumerate(ridges_arr):
-    #     print("\t", "Ridge", i, ":", r)
-
-    # (points, vertices, ridges, regions) = generate_voronoi_data(points_data)
-    # diagram_data = generate_voronoi_plot(points, vertices, ridges, regions, 1000, 1000)
-    # return jsonify({'diagram': diagram_data})
-
-    #diagram_data_clean = generate_voronoi_plot_clean(points_arr, vertices_arr, ridges_arr, regions, 1000, 1000)
+    
     return jsonify({'diagram': diagram_data_clean})
 
 if __name__ == '__main__':

@@ -110,14 +110,24 @@ class MyVoronoi:
 
 
     def sort_region_vertices(self) -> int:
+        print("sort_region_vertices()")
         for region in self.regions:
             ret_val = self.order_region_vertices(region)
             if ret_val != 1:
                 return -1
         return 1
 
+    def validate_region(self, region: Region):
+        vertice_count = len(region.vertices) - len(region.deleted_vertices)
+        if vertice_count < 2:
+            return -1
+        if vertice_count == 2:
+            print("ERROR - Region", region.id, "has only 2 vertices")
+            return -1
+        return 1
 
     def order_region_vertices(self, region: Region) -> int:
+        print("order_region_vertices()")
         ordered_region = list()
         visited = set()
         curr_node = region.vertices.pop()
