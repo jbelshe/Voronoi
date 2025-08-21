@@ -6,14 +6,12 @@ from flask import Flask, request, jsonify, render_template_string
 import numpy as np
 from scipy.spatial import Voronoi
 import matplotlib
-
-import MyVoronoi
+import json
 matplotlib.use('Agg')  # Set matplotlib to non-interactive mode
 import matplotlib.pyplot as plt
 from io import BytesIO
 import base64
-from voronoi_functions import generate_voronoi_data, generate_voronoi_plot
-from voronoi_functions_clean import generate_voronoi_data_clean, generate_voronoi_plot_clean
+from voronoi_functions_clean import generate_voronoi_data_clean
 
 
 
@@ -104,7 +102,7 @@ HTML_TEMPLATE = '''
 @app.route('/')
 def index():
     # Generate initial diagram with 10 points
-    diagram_data = generate_voronoi_data_clean(10)
+    diagram_data, json_str = generate_voronoi_data_clean(10)
     
     return render_template_string(HTML_TEMPLATE, diagram_data=diagram_data)
 
@@ -127,10 +125,25 @@ def generate():
     #         print(f"Error occurred: {e}")
     #         break
 
-    diagram_data_clean = generate_voronoi_data_clean(input_points, show_numbers=show_numbers, show_points=show_points)
+    diagram_data_clean, json_str = generate_voronoi_data_clean(input_points, show_numbers=show_numbers, show_points=show_points)
+    json_data = json.loads(json_str)
+    with open('voronoi_data.json', 'w') as f:
+        json.dump(json_data, f, indent=2)
+    print("JSON STR:", json_str)
+    i = 0
+    for point in json_data['points']:
+        print("POINT #", i, ":", point)
+        i += 1
+    i = 0
+    for vertex in json_data['vertices']:
+        print("VERTEX #", i, " : ", vertex)
+        i += 1
+    for ridge in json_data['ridges']:
+        print("RIDGE:", ridge[0], '-', ridge[1])
+    for region in json_data['regions']:
+        print("REGION #", region, " : ", json_data['regions'][region])
 
-    
-    return jsonify({'diagram': diagram_data_clean})
+    return jsonify({'diagram': diagram_data_clean, 'json_str': json_str})
 
 if __name__ == '__main__':
     from flask_cors import CORS

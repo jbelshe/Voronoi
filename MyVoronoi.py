@@ -198,6 +198,50 @@ class MyVoronoi:
         """Get all points as a numpy array."""
         return np.array([[point.x, point.y] for point in self.points])
         
+    def to_dict(self) -> dict:
+        """
+        Convert the Voronoi diagram to a dictionary with points, vertices, ridges, and regions.
+        
+        Returns:
+            dict: A dictionary with the following structure:
+                {
+                    'points': [[x1, y1], [x2, y2], ...],
+                    'vertices': [[x1, y1], [x2, y2], ...],
+                    'ridges': [[v1, v2], [v3, v4], ...],
+                    'regions': {
+                        region_id: [v1, v2, v3, ...],
+                        ...
+                    }
+                }
+        """
+        # Convert points to list of [x, y] pairs
+        points = [[float(p.x), float(p.y)] for p in self.points]
+        
+        # Convert vertices to list of [x, y] pairs
+        vertices = [[float(v.x), float(v.y)] for v in self.vertices]
+        
+        # Convert ridges to list of [v1, v2] pairs (only valid ridges)
+        ridges = []
+        for ridge in self.ridges:
+            v1, v2 = ridge.vertices
+            if v1 != -1 and v2 != -1:  # Only include valid ridges
+                ridges.append([int(v1), int(v2)])
+        
+        # Convert regions to dictionary mapping region ID to list of vertex indices
+        regions = {}
+        for region in self.regions:
+            # Only include non-deleted vertices that are in the region
+            valid_vertices = [v for v in region.ordered_vertices]
+            if valid_vertices:  # Only include regions with valid vertices
+                regions[int(region.id)] = [int(v) for v in valid_vertices]
+        
+        return {
+            'points': points,
+            'vertices': vertices,
+            'ridges': ridges,
+            'regions': regions
+        }
+        
     def get_vertex(self, index: int) -> Vertex:
         """Get vertex by index."""
         return self.vertices[index]

@@ -2,6 +2,7 @@ from collections import defaultdict
 import enum
 from math import pi
 from this import s
+import json
 import numpy as np
 from scipy.spatial import Voronoi
 import matplotlib
@@ -875,4 +876,8 @@ def generate_voronoi_plot_clean(my_voronoi, show_numbers, show_points=True):
     # Encode image as base64
     buf.seek(0)
     img_str = base64.b64encode(buf.getvalue()).decode()
-    return f'data:image/png;base64,{img_str}'
+
+    voronoi_dict = my_voronoi.to_dict()
+    json_str = json.dumps(voronoi_dict)
+
+    return f'data:image/png;base64,{img_str}', json_str
